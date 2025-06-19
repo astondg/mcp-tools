@@ -3,72 +3,45 @@ import { createMcpHandler } from '@vercel/mcp-adapter';
 
 const handler = createMcpHandler(
   (server) => {
-    // Example tool: Roll a dice
+    // Freelancer project search tool
     server.tool(
-      'roll_dice',
-      'Rolls an N-sided die and returns the result',
-      { 
-        sides: z.number().int().min(2).max(100).describe('Number of sides on the die (2-100)')
-      },
-      async ({ sides }) => {
-        const value = 1 + Math.floor(Math.random() * sides);
-        return {
-          content: [{ 
-            type: 'text', 
-            text: `🎲 You rolled a ${value} on a ${sides}-sided die!` 
-          }],
-        };
-      },
-    );
-
-    // Example tool: Generate random password
-    server.tool(
-      'generate_password',
-      'Generates a secure random password',
+      'search_freelancer_projects',
+      'Search for freelancer projects based on keywords, budget, and other criteria',
       {
-        length: z.number().int().min(8).max(128).default(16).describe('Password length (8-128 characters)'),
-        includeSymbols: z.boolean().default(true).describe('Include special symbols in password')
+        query: z.string().min(1).describe('Search query for project titles/descriptions'),
+        minBudget: z.number().int().min(0).optional().describe('Minimum project budget in USD'),
+        maxBudget: z.number().int().min(0).optional().describe('Maximum project budget in USD'),
+        limit: z.number().int().min(1).max(50).default(10).describe('Number of projects to return (1-50)')
       },
-      async ({ length, includeSymbols }) => {
-        const lowercase = 'abcdefghijklmnopqrstuvwxyz';
-        const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        const numbers = '0123456789';
-        const symbols = '!@#$%^&*()_+-=[]{}|;:,.<>?';
-        
-        let charset = lowercase + uppercase + numbers;
-        if (includeSymbols) {
-          charset += symbols;
-        }
-        
-        let password = '';
-        for (let i = 0; i < length; i++) {
-          password += charset.charAt(Math.floor(Math.random() * charset.length));
-        }
-        
-        return {
-          content: [{ 
-            type: 'text', 
-            text: `🔐 Generated password: ${password}` 
-          }],
-        };
-      },
-    );
+      async ({ query, minBudget, maxBudget, limit }) => {
+        // TODO: Implement actual Freelancer API integration
+        // For now, return a mock response to test the structure
+        const mockProjects = Array.from({ length: Math.min(limit, 3) }, (_, i) => ({
+          id: 12345 + i,
+          title: `${query} - Project ${i + 1}`,
+          description: 'This is a mock project description for testing purposes.',
+          budget: { 
+            min: Math.max(minBudget || 100, 500), 
+            max: Math.min(maxBudget || 2000, 1500), 
+            currency: 'USD' 
+          },
+          skills: ['JavaScript', 'React', 'Node.js'],
+          bidsCount: 15 + i * 5,
+          postedDate: new Date().toISOString()
+        }));
 
-    // Example tool: Get current timestamp
-    server.tool(
-      'current_timestamp',
-      'Returns the current Unix timestamp and formatted date',
-      {},
-      async () => {
-        const now = new Date();
-        const timestamp = Math.floor(now.getTime() / 1000);
-        const formatted = now.toISOString();
-        
+        const budgetFilter = minBudget || maxBudget ? 
+          ` (Budget filter: $${minBudget || 0}-${maxBudget || '∞'})` : '';
+
         return {
-          content: [{ 
-            type: 'text', 
-            text: `⏰ Current timestamp: ${timestamp}\nFormatted: ${formatted}` 
-          }],
+          content: [{
+            type: 'text',
+            text: `Found ${mockProjects.length} project(s) matching "${query}"${budgetFilter}:\n\n` +
+                  mockProjects.map(p => 
+                    `• ${p.title}\n  Budget: $${p.budget.min}-${p.budget.max}\n  Skills: ${p.skills.join(', ')}\n  Bids: ${p.bidsCount}`
+                  ).join('\n\n') +
+                  '\n\nNote: This is currently a mock response. API integration pending.'
+          }]
         };
       },
     );
