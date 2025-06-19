@@ -27,7 +27,8 @@ async function searchFreelancerProjects(
   token: string, 
   query: string, 
   minBudget?: number, 
-  maxBudget?: number, 
+  maxBudget?: number,
+  projectType?: 'fixed' | 'hourly',
   limit: number = 10
 ) {
   // Use the active projects endpoint for better results
@@ -44,6 +45,11 @@ async function searchFreelancerProjects(
   }
   if (maxBudget) {
     params.append('max_avg_price', maxBudget.toString());
+  }
+
+  // Add project type filter if provided
+  if (projectType) {
+    params.append('project_types[]', projectType);
   }
 
   const url = `${baseUrl}?${params.toString()}`;
@@ -105,11 +111,12 @@ const handler = createMcpHandler(
       'Search for freelancer projects based on keywords, budget, and other criteria',
       {
         query: z.string().min(1).describe('Search query for project titles/descriptions'),
-        minBudget: z.number().int().min(0).optional().describe('Minimum project budget in USD'),
-        maxBudget: z.number().int().min(0).optional().describe('Maximum project budget in USD'),
+        minBudget: z.number().int().min(0).optional().describe('Minimum average bid price in USD'),
+        maxBudget: z.number().int().min(0).optional().describe('Maximum average bid price in USD'),
+        projectType: z.enum(['fixed', 'hourly']).optional().describe('Project payment type: fixed or hourly'),
         limit: z.number().int().min(1).max(50).default(10).describe('Number of projects to return (1-50)')
       },
-      async ({ query, minBudget, maxBudget, limit }) => {
+      async ({ query, minBudget, maxBudget, projectType, limit }) => {
         try {
           // Check if user is authenticated
           const token = await TokenStorage.getFreelancerToken();
@@ -125,7 +132,7 @@ const handler = createMcpHandler(
           }
 
           // Call Freelancer API to search for projects
-          const projects = await searchFreelancerProjects(token, query, minBudget, maxBudget, limit);
+          const projects = await searchFreelancerProjects(token, query, minBudget, maxBudget, projectType, limit);
           
           if (!projects || projects.length === 0) {
             return {
@@ -137,7 +144,8 @@ const handler = createMcpHandler(
           }
 
           const budgetFilter = minBudget || maxBudget ? 
-            ` (Budget filter: $${minBudget || 0}-${maxBudget || '∞'})` : '';
+            ` (Budget: $${minBudget || 0}-${maxBudget || '∞'})` : '';
+          const typeFilter = projectType ? ` (Type: ${projectType})` : '';
 
           const projectsList = projects.map((p: FreelancerProject) => {
             const budget = formatBudget(p.budget);
@@ -150,7 +158,7 @@ const handler = createMcpHandler(
           return {
             content: [{
               type: 'text',
-              text: `✅ Found ${projects.length} project(s) matching "${query}"${budgetFilter}:\n\n${projectsList}\n\n🔗 Search performed using Freelancer.com API`
+              text: `✅ Found ${projects.length} project(s) matching "${query}"${budgetFilter}${typeFilter}:\n\n${projectsList}\n\n🔗 Search performed using Freelancer.com API`
             }]
           };
           
