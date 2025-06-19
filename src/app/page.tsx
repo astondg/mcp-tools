@@ -34,6 +34,24 @@ export default function Home() {
           </div>
         </div>
 
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-6 mb-8">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+            🔑 Authentication Required
+          </h3>
+          <p className="text-gray-600 dark:text-gray-300 mb-4">
+            Connect your Freelancer account to enable project search functionality.
+          </p>
+          <a
+            href="/auth"
+            className="inline-flex items-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 2l3-3h6l3 3m-6-9v-2a3 3 0 01.879-2.121m0 0a3 3 0 013.242 0M12 6V4"></path>
+            </svg>
+            Connect Account
+          </a>
+        </div>
+
         <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
             MCP Server Endpoint
