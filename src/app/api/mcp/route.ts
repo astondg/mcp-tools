@@ -22,6 +22,27 @@ interface FreelancerBudget {
   currency?: string;
 }
 
+interface BidRequest {
+  project_id: number;
+  bidder_id: number;
+  amount: number;
+  period: number;
+  milestone_percentage: number;
+  description?: string;
+  profile_id?: number;
+}
+
+interface BidResponse {
+  id: number;
+  bidder_id: number;
+  project_id: number;
+  amount: number;
+  period: number;
+  description: string;
+  time_submitted: number;
+  award_status?: string | null;
+}
+
 // Freelancer API helper functions
 async function searchFreelancerProjects(
   token: string, 
@@ -69,6 +90,31 @@ async function searchFreelancerProjects(
 
   const data = await response.json();
   return data.result?.projects || data.projects || [];
+}
+
+async function placeBidOnProject(
+  token: string,
+  bidRequest: BidRequest
+): Promise<BidResponse> {
+  const baseUrl = 'https://www.freelancer.com/api/projects/0.1/bids/';
+
+  const response = await fetch(baseUrl, {
+    method: 'POST',
+    headers: {
+      'Freelancer-OAuth-V1': token,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(bidRequest)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Freelancer bid API error: ${response.status} ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.result;
 }
 
 function formatBudget(budget: FreelancerBudget | undefined) {
@@ -168,6 +214,77 @@ const handler = createMcpHandler(
             content: [{
               type: 'text',
               text: `❌ Error searching projects: ${error instanceof Error ? error.message : 'Unknown error occurred'}\n\nPlease try again or check your authentication.`
+            }]
+          };
+        }
+      },
+    );
+
+    // Freelancer project bidding tool
+    server.tool(
+      'place_freelancer_bid',
+      'Place a bid on a freelancer project',
+      {
+        projectId: z.number().int().min(1).describe('ID of the project to bid on'),
+        bidderId: z.number().int().min(1).describe('ID of the bidder (your user ID)'),
+        amount: z.number().min(0.01).describe('Bid amount in project currency'),
+        period: z.number().int().min(1).describe('Number of days to complete the project'),
+        milestonePercentage: z.number().min(0).max(100).default(100).describe('Percentage of milestone payment (0-100)'),
+        description: z.string().min(10).optional().describe('Bid proposal description'),
+        profileId: z.number().int().optional().describe('Profile ID to use for bidding')
+      },
+      async ({ projectId, bidderId, amount, period, milestonePercentage, description, profileId }) => {
+        try {
+          // Check if user is authenticated
+          const token = await TokenStorage.getFreelancerToken();
+          
+          if (!token) {
+            return {
+              content: [{
+                type: 'text',
+                text: '🔒 Authentication required. Please visit the auth page to connect your Freelancer account:\n\n' +
+                      'Visit: /auth to connect your account'
+              }]
+            };
+          }
+
+          // Prepare bid request
+          const bidRequest: BidRequest = {
+            project_id: projectId,
+            bidder_id: bidderId,
+            amount: amount,
+            period: period,
+            milestone_percentage: milestonePercentage,
+            description: description,
+            profile_id: profileId
+          };
+
+          // Place the bid
+          const bidResult = await placeBidOnProject(token, bidRequest);
+
+          const submittedTime = new Date(bidResult.time_submitted * 1000).toLocaleString();
+
+          return {
+            content: [{
+              type: 'text',
+              text: `✅ Bid placed successfully!\n\n` +
+                    `• Bid ID: ${bidResult.id}\n` +
+                    `• Project ID: ${bidResult.project_id}\n` +
+                    `• Amount: $${bidResult.amount}\n` +
+                    `• Period: ${bidResult.period} days\n` +
+                    `• Description: ${bidResult.description}\n` +
+                    `• Submitted: ${submittedTime}\n` +
+                    `• Status: ${bidResult.award_status || 'Pending'}\n\n` +
+                    `🔗 Bid submitted via Freelancer.com API`
+            }]
+          };
+          
+        } catch (error) {
+          console.error('Error in place_freelancer_bid:', error);
+          return {
+            content: [{
+              type: 'text',
+              text: `❌ Error placing bid: ${error instanceof Error ? error.message : 'Unknown error occurred'}\n\nPlease check your parameters and try again.`
             }]
           };
         }
