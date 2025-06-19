@@ -13,30 +13,23 @@ export default function Home() {
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
             Available Tools
           </h2>
-          <div className="grid md:grid-cols-3 gap-6">
-            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+          <div className="grid md:grid-cols-1 gap-6 max-w-2xl mx-auto">
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
               <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                🎲 Roll Dice
+                💼 Search Freelancer Projects
               </h3>
-              <p className="text-gray-600 dark:text-gray-400 text-sm">
-                Roll an N-sided die (2-100 sides)
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Search for freelance projects with budget filters and keyword matching
               </p>
-            </div>
-            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                🔐 Generate Password
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 text-sm">
-                Create secure random passwords (8-128 chars)
-              </p>
-            </div>
-            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                ⏰ Current Timestamp
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 text-sm">
-                Get current Unix timestamp and formatted date
-              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div><strong>Parameters:</strong></div>
+                <div>• query: Search keywords (required)</div>
+                <div>• minBudget, maxBudget: Budget range filters (optional)</div>
+                <div>• limit: Number of results 1-50 (default: 10)</div>
+              </div>
+              <div className="mt-3 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 rounded text-xs text-amber-700 dark:text-amber-300">
+                🚧 Currently returns mock data. Real API integration in development.
+              </div>
             </div>
           </div>
         </div>
