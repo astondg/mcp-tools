@@ -19,16 +19,59 @@ export default function McpToolsPage() {
                 💼 Search Freelancer Projects
               </h3>
               <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
-                Search for freelance projects with budget filters and keyword matching
+                Search for freelance projects with budget filters, keyword matching, and detailed project information including ID, description, location, and skills
               </p>
               <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
                 <div><strong>Parameters:</strong></div>
                 <div>• query: Search keywords (required)</div>
                 <div>• minBudget, maxBudget: Budget range filters (optional)</div>
+                <div>• projectType: &apos;fixed&apos; or &apos;hourly&apos; (optional)</div>
                 <div>• limit: Number of results 1-50 (default: 10)</div>
               </div>
-              <div className="mt-3 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 rounded text-xs text-amber-700 dark:text-amber-300">
-                🚧 Currently returns mock data. Real API integration in development.
+              <div className="mt-3 px-3 py-2 bg-green-50 dark:bg-green-900/20 rounded text-xs text-green-700 dark:text-green-300">
+                ✅ Live API integration with Freelancer.com
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                📋 Get Project Details
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Get comprehensive details about a specific freelancer project including full description, job requirements, location, and all available project metadata
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div><strong>Parameters:</strong></div>
+                <div>• projectId: ID of the project (required)</div>
+                <div>• fullDescription: Include full description (optional)</div>
+                <div>• jobDetails: Include job/skills information (optional)</div>
+                <div>• userDetails: Include user information (optional)</div>
+                <div>• locationDetails: Include location information (optional)</div>
+                <div>• Plus 40+ other optional detail flags</div>
+              </div>
+              <div className="mt-3 px-3 py-2 bg-green-50 dark:bg-green-900/20 rounded text-xs text-green-700 dark:text-green-300">
+                ✅ Live API integration with Freelancer.com
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                💰 Place Freelancer Bid
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Place a bid on a freelancer project with specified amount, timeline, and proposal description
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div><strong>Parameters:</strong></div>
+                <div>• projectId: ID of the project (required)</div>
+                <div>• bidderId: Your user ID (required)</div>
+                <div>• amount: Bid amount (required)</div>
+                <div>• period: Days to complete (required)</div>
+                <div>• description: Proposal description (optional)</div>
+                <div>• milestonePercentage: Milestone payment % (default: 100)</div>
+              </div>
+              <div className="mt-3 px-3 py-2 bg-green-50 dark:bg-green-900/20 rounded text-xs text-green-700 dark:text-green-300">
+                ✅ Live API integration with Freelancer.com
               </div>
             </div>
           </div>

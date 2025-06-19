@@ -6,14 +6,25 @@ import { TokenStorage } from '@/lib/redis';
 interface FreelancerProject {
   id: number;
   title: string;
+  description?: string;
+  preview_description?: string;
   budget?: {
     minimum?: number;
     maximum?: number;
     currency?: string;
   };
   jobs?: Array<{ name: string }>;
-  bid_stats?: { bid_count: number };
+  bid_stats?: { 
+    bid_count: number;
+    bid_avg?: number;
+  };
   time_submitted?: number;
+  location?: {
+    city?: string;
+    country?: {
+      name?: string;
+    };
+  };
 }
 
 interface FreelancerBudget {
@@ -333,10 +344,44 @@ const handler = createMcpHandler(
 
           const projectsList = projects.map((p: FreelancerProject) => {
             const budget = formatBudget(p.budget);
-            const skills = p.jobs?.map((job) => job.name).slice(0, 3).join(', ') || 'Not specified';
+            const skills = p.jobs?.map((job: { name: string }) => job.name).slice(0, 5).join(', ') || 'Not specified';
             const timePosted = formatTimeAgo(p.time_submitted);
             
-            return `• ${p.title}\n  Budget: ${budget}\n  Skills: ${skills}\n  Bids: ${p.bid_stats?.bid_count || 0}\n  Posted: ${timePosted}`;
+            // Get description - prefer full description, fall back to preview
+            const description = p.description || p.preview_description || '';
+            const truncatedDescription = description.length > 150 
+              ? description.substring(0, 150) + '...' 
+              : description;
+            
+            // Get location info
+            let location = 'Not specified';
+            if (p.location) {
+              const city = p.location.city || '';
+              const country = p.location.country?.name || '';
+              if (city && country) {
+                location = `${city}, ${country}`;
+              } else if (city) {
+                location = city;
+              } else if (country) {
+                location = country;
+              }
+            }
+            
+            let projectInfo = `• **${p.title}** (ID: ${p.id})\n`;
+            projectInfo += `  Budget: ${budget}\n`;
+            projectInfo += `  Skills: ${skills}\n`;
+            projectInfo += `  Location: ${location}\n`;
+            projectInfo += `  Bids: ${p.bid_stats?.bid_count || 0}`;
+            if (p.bid_stats?.bid_avg) {
+              projectInfo += ` (avg: $${p.bid_stats.bid_avg})`;
+            }
+            projectInfo += `\n  Posted: ${timePosted}`;
+            
+            if (truncatedDescription) {
+              projectInfo += `\n  Description: ${truncatedDescription}`;
+            }
+            
+            return projectInfo;
           }).join('\n\n');
 
           return {
