@@ -30,8 +30,8 @@ async function searchFreelancerProjects(
   maxBudget?: number, 
   limit: number = 10
 ) {
-  // Try the simpler projects endpoint first
-  const baseUrl = 'https://www.freelancer.com/api/projects/0.1/projects';
+  // Use the correct search endpoint for all projects
+  const baseUrl = 'https://www.freelancer.com/api/projects/0.1/projects/all';
   const params = new URLSearchParams({
     query: query,
     limit: limit.toString(),
@@ -48,9 +48,6 @@ async function searchFreelancerProjects(
 
   const url = `${baseUrl}?${params.toString()}`;
   
-  console.log('Making request to Freelancer API:', url);
-  console.log('Using token:', token.substring(0, 10) + '...');
-  
   const response = await fetch(url, {
     headers: {
       'Freelancer-OAuth-V1': token,
@@ -59,18 +56,12 @@ async function searchFreelancerProjects(
     }
   });
 
-  console.log('Response status:', response.status);
-  console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('API Error Response:', errorText);
     throw new Error(`Freelancer API error: ${response.status} ${errorText}`);
   }
 
   const data = await response.json();
-  console.log('API Response structure:', Object.keys(data));
-  
   return data.result?.projects || data.projects || [];
 }
 
