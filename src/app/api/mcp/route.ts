@@ -2,6 +2,99 @@ import { z } from 'zod';
 import { createMcpHandler } from '@vercel/mcp-adapter';
 import { TokenStorage } from '@/lib/redis';
 
+// Type definitions
+interface FreelancerProject {
+  id: number;
+  title: string;
+  budget?: {
+    minimum?: number;
+    maximum?: number;
+    currency?: string;
+  };
+  jobs?: Array<{ name: string }>;
+  bid_stats?: { bid_count: number };
+  time_submitted?: number;
+}
+
+interface FreelancerBudget {
+  minimum?: number;
+  maximum?: number;
+  currency?: string;
+}
+
+// Freelancer API helper functions
+async function searchFreelancerProjects(
+  token: string, 
+  query: string, 
+  minBudget?: number, 
+  maxBudget?: number, 
+  limit: number = 10
+) {
+  const baseUrl = 'https://www.freelancer.com/api/projects/0.1/projects/active/';
+  const params = new URLSearchParams({
+    query: query,
+    limit: limit.toString(),
+    compact: 'true'
+  });
+
+  // Add budget filters if provided
+  if (minBudget) {
+    params.append('min_avg_price', minBudget.toString());
+  }
+  if (maxBudget) {
+    params.append('max_avg_price', maxBudget.toString());
+  }
+
+  const url = `${baseUrl}?${params.toString()}`;
+  
+  const response = await fetch(url, {
+    headers: {
+      'freelancer-oauth-v1': token,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Freelancer API error: ${response.status} ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.result?.projects || [];
+}
+
+function formatBudget(budget: FreelancerBudget | undefined) {
+  if (!budget) return 'Not specified';
+  
+  if (budget.minimum && budget.maximum) {
+    return `$${budget.minimum}-$${budget.maximum} ${budget.currency || 'USD'}`;
+  } else if (budget.minimum) {
+    return `$${budget.minimum}+ ${budget.currency || 'USD'}`;
+  } else if (budget.maximum) {
+    return `Up to $${budget.maximum} ${budget.currency || 'USD'}`;
+  }
+  
+  return 'Budget not specified';
+}
+
+function formatTimeAgo(timestamp: number | undefined) {
+  if (!timestamp) return 'Unknown';
+  
+  const now = Date.now() / 1000;
+  const diff = now - timestamp;
+  
+  if (diff < 3600) {
+    const minutes = Math.floor(diff / 60);
+    return `${minutes} minute${minutes !== 1 ? 's' : ''} ago`;
+  } else if (diff < 86400) {
+    const hours = Math.floor(diff / 3600);
+    return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
+  } else {
+    const days = Math.floor(diff / 86400);
+    return `${days} day${days !== 1 ? 's' : ''} ago`;
+  }
+}
+
 const handler = createMcpHandler(
   (server) => {
     // Freelancer project search tool
@@ -29,33 +122,33 @@ const handler = createMcpHandler(
             };
           }
 
-          // TODO: Implement actual Freelancer API call using the token
-          // For now, return enhanced mock data showing authentication works
-          const mockProjects = Array.from({ length: Math.min(limit, 3) }, (_, i) => ({
-            id: 12345 + i,
-            title: `${query} - Project ${i + 1}`,
-            description: 'This is a mock project description for testing purposes.',
-            budget: { 
-              min: Math.max(minBudget || 100, 500), 
-              max: Math.min(maxBudget || 2000, 1500), 
-              currency: 'USD' 
-            },
-            skills: ['JavaScript', 'React', 'Node.js'],
-            bidsCount: 15 + i * 5,
-            postedDate: new Date().toISOString()
-          }));
+          // Call Freelancer API to search for projects
+          const projects = await searchFreelancerProjects(token, query, minBudget, maxBudget, limit);
+          
+          if (!projects || projects.length === 0) {
+            return {
+              content: [{
+                type: 'text',
+                text: `No projects found matching "${query}". Try different keywords or broader search terms.`
+              }]
+            };
+          }
 
           const budgetFilter = minBudget || maxBudget ? 
             ` (Budget filter: $${minBudget || 0}-${maxBudget || '∞'})` : '';
 
+          const projectsList = projects.map((p: FreelancerProject) => {
+            const budget = formatBudget(p.budget);
+            const skills = p.jobs?.map((job) => job.name).slice(0, 3).join(', ') || 'Not specified';
+            const timePosted = formatTimeAgo(p.time_submitted);
+            
+            return `• ${p.title}\n  Budget: ${budget}\n  Skills: ${skills}\n  Bids: ${p.bid_stats?.bid_count || 0}\n  Posted: ${timePosted}`;
+          }).join('\n\n');
+
           return {
             content: [{
               type: 'text',
-              text: `✅ Authenticated user searching for "${query}"${budgetFilter}:\n\n` +
-                    mockProjects.map(p => 
-                      `• ${p.title}\n  Budget: $${p.budget.min}-${p.budget.max}\n  Skills: ${p.skills.join(', ')}\n  Bids: ${p.bidsCount}`
-                    ).join('\n\n') +
-                    '\n\n🚧 Note: Using mock data. Real Freelancer API integration pending.'
+              text: `✅ Found ${projects.length} project(s) matching "${query}"${budgetFilter}:\n\n${projectsList}\n\n🔗 Search performed using Freelancer.com API`
             }]
           };
           
@@ -64,7 +157,7 @@ const handler = createMcpHandler(
           return {
             content: [{
               type: 'text',
-              text: '❌ Error occurred while searching projects. Please try again or check your authentication.'
+              text: `❌ Error searching projects: ${error instanceof Error ? error.message : 'Unknown error occurred'}\n\nPlease try again or check your authentication.`
             }]
           };
         }

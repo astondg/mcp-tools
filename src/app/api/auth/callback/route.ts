@@ -35,10 +35,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// TODO: Implement actual token exchange with Freelancer API
+// Exchange authorization code for access token with Freelancer API
 async function exchangeCodeForToken(code: string) {
-  // This is a placeholder - will implement once we have Freelancer app credentials
-  
   const tokenEndpoint = 'https://accounts.freelancer.com/oauth/token';
   const clientId = process.env.FREELANCER_CLIENT_ID;
   const clientSecret = process.env.FREELANCER_CLIENT_SECRET;
@@ -47,6 +45,8 @@ async function exchangeCodeForToken(code: string) {
   if (!clientId || !clientSecret || !redirectUri) {
     throw new Error('Missing Freelancer OAuth credentials in environment variables');
   }
+  
+  console.log('Exchanging code for token with Freelancer API...');
   
   const response = await fetch(tokenEndpoint, {
     method: 'POST',
@@ -64,10 +64,12 @@ async function exchangeCodeForToken(code: string) {
   
   if (!response.ok) {
     const errorText = await response.text();
+    console.error('Token exchange failed:', response.status, errorText);
     throw new Error(`Token exchange failed: ${response.status} ${errorText}`);
   }
   
   const tokenData = await response.json();
+  console.log('Token exchange successful');
   
   if (!tokenData.access_token) {
     throw new Error('No access token received from Freelancer');

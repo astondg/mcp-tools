@@ -25,11 +25,28 @@ export default function AuthPage() {
   };
 
   const handleConnect = () => {
-    // TODO: Replace with actual Freelancer OAuth URL once we have client credentials
-    // For now, show placeholder
-    alert('Freelancer OAuth integration pending. Need to register app with Freelancer first.');
+    // Check if we're using test token (skip OAuth if so)
+    const isTestMode = process.env.NEXT_PUBLIC_FREELANCER_TEST_TOKEN === 'true';
     
-    // When ready, use: window.location.href = freelancerAuthUrl;
+    if (isTestMode) {
+      alert('Test mode: Using FREELANCER_TEST_TOKEN environment variable. Authentication is automatic.');
+      // Refresh to update auth status
+      checkAuthStatus();
+      return;
+    }
+    
+    // Build Freelancer OAuth URL
+    const clientId = process.env.NEXT_PUBLIC_FREELANCER_CLIENT_ID || '172dab2b-1692-49ff-a80f-59c533454b46';
+    const redirectUri = `${window.location.origin}/api/auth/callback`;
+    const scope = 'basic'; // Adjust scopes as needed
+    
+    const freelancerAuthUrl = `https://accounts.freelancer.com/oauth/authorize?` +
+      `response_type=code&` +
+      `client_id=${clientId}&` +
+      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+      `scope=${scope}`;
+    
+    window.location.href = freelancerAuthUrl;
   };
 
   const handleDisconnect = async () => {
