@@ -30,8 +30,8 @@ async function searchFreelancerProjects(
   maxBudget?: number, 
   limit: number = 10
 ) {
-  // Use the correct search endpoint for all projects
-  const baseUrl = 'https://www.freelancer.com/api/projects/0.1/projects/all';
+  // Use the active projects endpoint for better results
+  const baseUrl = 'https://www.freelancer.com/api/projects/0.1/projects/active';
   const params = new URLSearchParams({
     query: query,
     limit: limit.toString(),

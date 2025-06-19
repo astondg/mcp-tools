@@ -36,11 +36,29 @@ Building an MCP tool that integrates with the Freelancer.com API to retrieve pro
 - [x] Support both OAuth flow and test token override
 - [x] Ready for live testing with FREELANCER_TEST_TOKEN
 
-### Phase 3: Enhanced Search Features
-- [ ] Add project filtering (budget, category, skills)
+### Phase 3: Project Bidding Functionality
+
+#### Phase 3A: Enhanced Search Features ✅ (In Progress)
+- [x] Update to use active projects endpoint (/projects/active)
+- [ ] Add project filtering (budget, category, skills)  
 - [ ] Implement project details retrieval
 - [ ] Add pagination support
 - [ ] Create structured response formatting
+
+#### Phase 3B: Bidding Implementation (Planned)
+- [ ] Research Freelancer bidding API endpoint and parameters
+- [ ] Create `place_bid` MCP tool with proper validation
+- [ ] Implement bid parameters (amount, period, description, milestones)
+- [ ] Add bid status checking and management
+- [ ] Handle bidding errors and restrictions
+- [ ] Add bid history and tracking features
+
+#### Phase 3C: Advanced Bidding Features (Future)
+- [ ] AI-powered bid amount suggestions based on project complexity
+- [ ] Automated bid templates and personalization
+- [ ] Bid success rate tracking and analytics
+- [ ] Project evaluation scoring before bidding
+- [ ] Bulk bidding capabilities with filters
 
 ### Phase 4: AI Analysis Features
 - [ ] Add project evaluation criteria
@@ -55,11 +73,12 @@ Building an MCP tool that integrates with the Freelancer.com API to retrieve pro
 - [ ] Documentation updates
 
 ## Current Status
-- **Active Phase**: Phase 3 - Enhanced Search Features
+- **Active Phase**: Phase 3A - Enhanced Search + Phase 3B - Bidding Implementation
 - **Completed**: Phase 1 Foundation + Phase 2A Authentication + Phase 2B Real API Integration
-- **Next Steps**: Test with real token, enhance search capabilities, add AI analysis features
-- **Blockers**: None - ready for testing and enhancement
-- **Ready to Deploy**: Complete Freelancer API integration with OAuth and test token support
+- **Recent**: Updated to use /projects/active endpoint for better project search results
+- **Next Steps**: Implement bidding functionality, enhance search capabilities, add AI analysis
+- **Blockers**: Need Freelancer bidding API documentation from user
+- **Ready to Deploy**: Working project search with OAuth and test token support
 
 ## Technical Notes
 - Using Next.js API routes with MCP adapter
