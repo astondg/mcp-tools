@@ -14,12 +14,6 @@ export default function Home() {
             </div>
             <div className="flex items-center space-x-4">
               <Link
-                href="/mcp-tools"
-                className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white font-medium"
-              >
-                MCP Tools
-              </Link>
-              <Link
                 href="/auth"
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
               >
@@ -52,12 +46,6 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
               </svg>
               Start Finding Projects
-            </Link>
-            <Link
-              href="/mcp-tools"
-              className="border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 px-8 py-4 rounded-lg font-medium text-lg transition-colors"
-            >
-              Learn About MCP
             </Link>
           </div>
         </div>
@@ -203,9 +191,6 @@ export default function Home() {
               <p className="text-gray-400 text-sm mt-1">AI-powered freelance project matching</p>
             </div>
             <div className="flex space-x-6">
-              <Link href="/mcp-tools" className="text-gray-400 hover:text-white transition-colors">
-                MCP Tools
-              </Link>
               <Link href="/auth" className="text-gray-400 hover:text-white transition-colors">
                 Connect Account
               </Link>
