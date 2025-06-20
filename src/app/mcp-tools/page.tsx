@@ -16,6 +16,22 @@ export default function McpToolsPage() {
           <div className="grid md:grid-cols-1 gap-6 max-w-2xl mx-auto">
             <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
               <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                🛒 Get OzBargain Deals
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Fetch and parse the latest deals from OzBargain RSS feed with detailed information including title, description, categories, and thumbnail images
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div><strong>Parameters:</strong></div>
+                <div>• limit: Number of deals to return 1-50 (default: 10)</div>
+              </div>
+              <div className="mt-3 px-3 py-2 bg-green-50 dark:bg-green-900/20 rounded text-xs text-green-700 dark:text-green-300">
+                ✅ Live RSS feed integration with OzBargain.com.au
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
                 💼 Search Freelancer Projects
               </h3>
               <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">

@@ -300,6 +300,115 @@ function formatTimeAgo(timestamp: number | undefined) {
 
 const handler = createMcpHandler(
   (server) => {
+    // OzBargain deals RSS feed tool
+    server.tool(
+      'get_ozbargain_deals',
+      'Fetch and parse the latest deals from OzBargain RSS feed',
+      {
+        limit: z.number().int().min(1).max(50).default(10).describe('Number of deals to return (1-50)')
+      },
+      async ({ limit }) => {
+        try {
+          const response = await fetch('https://www.ozbargain.com.au/deals/feed', {
+            headers: {
+              'User-Agent': 'MCP-Tools RSS Reader/1.0'
+            }
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const xmlText = await response.text();
+          
+          // Parse XML using DOMParser (available in Node.js environments with proper polyfill)
+          // For now, we'll use regex parsing for simplicity
+          const itemMatches = xmlText.match(/<item>([\s\S]*?)<\/item>/g);
+          
+          if (!itemMatches) {
+            return {
+              content: [{
+                type: 'text',
+                text: 'No deals found in the RSS feed.'
+              }]
+            };
+          }
+
+          const deals = itemMatches.slice(0, limit).map((item, index) => {
+            // Extract title
+            const titleMatch = item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/);
+            const title = titleMatch ? titleMatch[1] : '';
+
+            // Extract link
+            const linkMatch = item.match(/<link>(.*?)<\/link>/);
+            const link = linkMatch ? linkMatch[1] : '';
+
+            // Extract description and clean CDATA
+            const descMatch = item.match(/<description><!\[CDATA\[([\s\S]*?)\]\]><\/description>/);
+            let description = '';
+            if (descMatch) {
+              // Remove HTML tags and extract text content
+              description = descMatch[1]
+                .replace(/<[^>]*>/g, '') // Remove HTML tags
+                .replace(/&[^;]+;/g, ' ') // Remove HTML entities
+                .trim()
+                .substring(0, 200); // Limit to 200 chars
+              if (description.length === 200) description += '...';
+            }
+
+            // Extract media thumbnail
+            const thumbnailMatch = item.match(/<media:thumbnail url="([^"]*?)"/);
+            const thumbnail = thumbnailMatch ? thumbnailMatch[1] : null;
+
+            // Extract categories
+            const categoryMatches = item.match(/<category[^>]*?>(.*?)<\/category>/g);
+            const categories = categoryMatches ? 
+              categoryMatches.map(cat => cat.replace(/<[^>]*>/g, '').trim()) : [];
+
+            // Extract publish date
+            const pubDateMatch = item.match(/<pubDate>(.*?)<\/pubDate>/);
+            const pubDate = pubDateMatch ? pubDateMatch[1] : '';
+
+            return {
+              index: index + 1,
+              title,
+              link,
+              description,
+              thumbnail,
+              categories,
+              pubDate
+            };
+          });
+
+          // Format as JSON string for clean output
+          const formattedDeals = deals.map(deal => ({
+            title: deal.title,
+            link: deal.link,
+            description: deal.description,
+            thumbnail: deal.thumbnail,
+            categories: deal.categories,
+            pubDate: deal.pubDate
+          }));
+
+          return {
+            content: [{
+              type: 'text',
+              text: `📦 Found ${deals.length} deals from OzBargain:\n\n${JSON.stringify(formattedDeals, null, 2)}`
+            }]
+          };
+
+        } catch (error) {
+          console.error('Error fetching OzBargain deals:', error);
+          return {
+            content: [{
+              type: 'text',
+              text: `❌ Error fetching OzBargain deals: ${error instanceof Error ? error.message : 'Unknown error occurred'}`
+            }]
+          };
+        }
+      }
+    );
+
     // Freelancer project search tool
     server.tool(
       'search_freelancer_projects',
