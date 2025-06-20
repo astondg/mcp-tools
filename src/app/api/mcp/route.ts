@@ -335,9 +335,15 @@ const handler = createMcpHandler(
           }
 
           const deals = itemMatches.slice(0, limit).map((item, index) => {
-            // Extract title
-            const titleMatch = item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/);
-            const title = titleMatch ? titleMatch[1] : '';
+            // Extract title (handle both CDATA and plain text)
+            let titleMatch = item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/);
+            let title = '';
+            if (titleMatch) {
+              title = titleMatch[1];
+            } else {
+              titleMatch = item.match(/<title>(.*?)<\/title>/);
+              title = titleMatch ? titleMatch[1] : '';
+            }
 
             // Extract link
             const linkMatch = item.match(/<link>(.*?)<\/link>/);
