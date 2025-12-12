@@ -1,0 +1,2 @@
+# No external dependencies required for basic CSV parsing
+# Python standard library only (csv, json, datetime, re)

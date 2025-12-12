@@ -389,6 +389,41 @@ export async function deleteExpense(id: string): Promise<void> {
 // CSV Import
 // ==========================================
 
+// Helper to match description against categorization rules (in-memory)
+function matchCategory(
+  description: string,
+  rules: Array<{ id: string; pattern: string; matchType: RuleMatchType; categoryId: string; categoryName: string }>
+): { categoryId: string; categoryName: string } | null {
+  const descLower = description.toLowerCase();
+
+  for (const rule of rules) {
+    let matched = false;
+
+    switch (rule.matchType) {
+      case 'CONTAINS':
+        matched = descLower.includes(rule.pattern.toLowerCase());
+        break;
+      case 'STARTS_WITH':
+        matched = descLower.startsWith(rule.pattern.toLowerCase());
+        break;
+      case 'REGEX':
+        try {
+          const regex = new RegExp(rule.pattern, 'i');
+          matched = regex.test(description);
+        } catch {
+          // Invalid regex, skip
+        }
+        break;
+    }
+
+    if (matched) {
+      return { categoryId: rule.categoryId, categoryName: rule.categoryName };
+    }
+  }
+
+  return null;
+}
+
 export async function importExpenses(data: {
   csvData: string;
   dateColumn: string;
@@ -428,7 +463,30 @@ export async function importExpenses(data: {
     return result;
   }
 
+  // Pre-fetch all categorization rules once
+  const rules = await prisma.categorizationRule.findMany({
+    where: { isActive: true },
+    include: { category: true },
+    orderBy: { priority: 'desc' },
+  });
+  const rulesForMatching = rules.map((r) => ({
+    id: r.id,
+    pattern: r.pattern,
+    matchType: r.matchType,
+    categoryId: r.categoryId,
+    categoryName: r.category.name,
+  }));
+
+  // Parse all rows first to collect bank references
   const startRow = data.skipHeader !== false ? 1 : 0;
+  const parsedRows: Array<{
+    rowNum: number;
+    date: Date;
+    amount: number;
+    description: string;
+    bankReference: string;
+    dateStr: string;
+  }> = [];
 
   for (let i = startRow; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -472,44 +530,75 @@ export async function importExpenses(data: {
       continue;
     }
 
-    // Skip income (positive amounts) - only track expenses (negative or absolute)
     const expenseAmount = Math.abs(amount);
-
-    // Generate bank reference for dedup
     const bankReference = `${dateStr}_${amountStr}_${description.substring(0, 50)}`;
 
-    // Check for duplicate
-    const existing = await prisma.expense.findUnique({
-      where: { bankReference },
+    parsedRows.push({
+      rowNum: i + 1,
+      date,
+      amount: expenseAmount,
+      description,
+      bankReference,
+      dateStr,
     });
+  }
 
-    if (existing) {
+  if (parsedRows.length === 0) {
+    return result;
+  }
+
+  // Batch check for existing bank references
+  const bankReferences = parsedRows.map((r) => r.bankReference);
+  const existingExpenses = await prisma.expense.findMany({
+    where: { bankReference: { in: bankReferences } },
+    select: { bankReference: true },
+  });
+  const existingRefs = new Set(existingExpenses.map((e) => e.bankReference));
+
+  // Prepare expenses to insert
+  const expensesToCreate: Array<{
+    date: Date;
+    amount: number;
+    categoryId: string;
+    description: string;
+    source: ExpenseSource;
+    bankReference: string;
+  }> = [];
+
+  for (const row of parsedRows) {
+    // Skip duplicates
+    if (existingRefs.has(row.bankReference)) {
       result.skipped++;
       continue;
     }
 
-    // Try to auto-categorize
-    const suggestion = await suggestCategory(description);
+    // Try to auto-categorize using in-memory rules
+    const match = matchCategory(row.description, rulesForMatching);
 
-    if (suggestion.matched && suggestion.categoryId) {
-      await prisma.expense.create({
-        data: {
-          date,
-          amount: expenseAmount,
-          categoryId: suggestion.categoryId,
-          description,
-          source: 'BANK_IMPORT',
-          bankReference,
-        },
+    if (match) {
+      expensesToCreate.push({
+        date: row.date,
+        amount: row.amount,
+        categoryId: match.categoryId,
+        description: row.description,
+        source: 'BANK_IMPORT',
+        bankReference: row.bankReference,
       });
-      result.imported++;
     } else {
       result.uncategorized.push({
-        description,
-        amount: expenseAmount,
-        date: dateStr,
+        description: row.description,
+        amount: row.amount,
+        date: row.dateStr,
       });
     }
+  }
+
+  // Bulk insert all categorized expenses
+  if (expensesToCreate.length > 0) {
+    await prisma.expense.createMany({
+      data: expensesToCreate,
+    });
+    result.imported = expensesToCreate.length;
   }
 
   return result;
