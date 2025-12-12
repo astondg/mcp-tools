@@ -103,3 +103,109 @@ model MaintenanceSchedule {
 
   @@map("maintenance_schedules")
 }
+
+// ==========================================
+// Budget & Expense Tracking System
+// ==========================================
+
+enum BudgetPeriod {
+  WEEKLY
+  FORTNIGHTLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum ExpenseSource {
+  MANUAL
+  BANK_IMPORT
+}
+
+enum RuleMatchType {
+  CONTAINS
+  STARTS_WITH
+  REGEX
+}
+
+model BudgetCategory {
+  id           String         @id @default(uuid())
+  name         String         @unique
+  parentId     String?        @map("parent_id")
+  period       BudgetPeriod
+  budgetAmount Decimal        @map("budget_amount") @db.Decimal(10, 2)
+  isActive     Boolean        @default(true) @map("is_active")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  parent   BudgetCategory?      @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children BudgetCategory[]     @relation("CategoryHierarchy")
+  expenses Expense[]
+  rules    CategorizationRule[]
+
+  @@map("budget_categories")
+}
+
+model Expense {
+  id            String        @id @default(uuid())
+  date          DateTime      @db.Date
+  amount        Decimal       @db.Decimal(10, 2)
+  categoryId    String        @map("category_id")
+  description   String
+  merchantName  String?       @map("merchant_name")
+  source        ExpenseSource @default(MANUAL)
+  bankReference String?       @unique @map("bank_reference")
+  notes         String?
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  category BudgetCategory @relation(fields: [categoryId], references: [id])
+
+  @@map("expenses")
+}
+
+model CategorizationRule {
+  id         String        @id @default(uuid())
+  pattern    String
+  matchType  RuleMatchType @default(CONTAINS) @map("match_type")
+  categoryId String        @map("category_id")
+  priority   Int           @default(0)
+  isActive   Boolean       @default(true) @map("is_active")
+  createdAt  DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  category BudgetCategory @relation(fields: [categoryId], references: [id])
+
+  @@map("categorization_rules")
+}
+
+model IncomeSource {
+  id             String   @id @default(uuid())
+  name           String   @unique
+  expectedAmount Decimal  @map("expected_amount") @db.Decimal(10, 2)
+  payDay         Int      @map("pay_day") // Day of month (1-31, 31 = last day)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  incomes Income[]
+
+  @@map("income_sources")
+}
+
+model Income {
+  id            String   @id @default(uuid())
+  date          DateTime @db.Date
+  amount        Decimal  @db.Decimal(10, 2)
+  sourceId      String   @map("source_id")
+  description   String?
+  bankReference String?  @unique @map("bank_reference")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relations
+  source IncomeSource @relation(fields: [sourceId], references: [id])
+
+  @@map("incomes")
+}

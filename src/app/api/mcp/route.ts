@@ -19,6 +19,27 @@ import {
   getUpcomingMaintenance,
 } from '@/lib/vehicle/queries';
 import { SERVICE_TYPES } from '@/lib/vehicle/types';
+import {
+  upsertCategory,
+  getCategories,
+  deleteCategory,
+  addExpense,
+  getExpenses,
+  updateExpense,
+  deleteExpense,
+  importExpenses,
+  addCategorizationRule,
+  getCategorizationRules,
+  deleteCategorizationRule,
+  suggestCategory,
+  getBudgetSummary,
+  getBalance,
+  upsertIncomeSource,
+  getIncomeSources,
+  addIncome,
+  getIncome,
+} from '@/lib/budget/queries';
+import { BUDGET_PERIODS } from '@/lib/budget/types';
 
 // Type definitions
 interface FreelancerProject {
@@ -1720,6 +1741,725 @@ const handler = createMcpHandler(
           };
         } catch (error) {
           console.error('Error in vehicle_get_upcoming:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // ==========================================
+    // Budget & Expense Tracking Tools
+    // ==========================================
+
+    // Set budget category
+    server.tool(
+      'budget_set_category',
+      'Create or update a budget category with an amount for a specific period',
+      {
+        name: z.string().min(1).max(100).describe('Category name (e.g., "Groceries", "Utilities")'),
+        period: z.enum(['WEEKLY', 'FORTNIGHTLY', 'MONTHLY', 'QUARTERLY', 'YEARLY']).describe(`Budget period: ${BUDGET_PERIODS.join(', ')}`),
+        budgetAmount: z.number().min(0).describe('Budget amount for this period'),
+        parentName: z.string().optional().describe('Parent category name for subcategories'),
+      },
+      async (params) => {
+        try {
+          const category = await upsertCategory({
+            name: params.name,
+            period: params.period,
+            budgetAmount: params.budgetAmount,
+            parentName: params.parentName,
+          });
+
+          return {
+            content: [{
+              type: 'text',
+              text: `✅ Budget category ${category.id ? 'updated' : 'created'}!\n\n` +
+                    `• Name: ${category.name}\n` +
+                    `• Period: ${category.period}\n` +
+                    `• Amount: $${category.budgetAmount.toFixed(2)}\n` +
+                    (category.parentName ? `• Parent: ${category.parentName}\n` : '')
+            }]
+          };
+        } catch (error) {
+          console.error('Error in budget_set_category:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Get budget categories
+    server.tool(
+      'budget_get_categories',
+      'List all budget categories with their amounts, optionally filtered by period',
+      {
+        period: z.enum(['WEEKLY', 'FORTNIGHTLY', 'MONTHLY', 'QUARTERLY', 'YEARLY']).optional().describe('Filter by period'),
+        activeOnly: z.boolean().optional().describe('Only show active categories (default: true)'),
+      },
+      async (params) => {
+        try {
+          const categories = await getCategories(params);
+
+          if (categories.length === 0) {
+            return {
+              content: [{ type: 'text', text: 'No budget categories found. Use budget_set_category to create one.' }]
+            };
+          }
+
+          const formatCategory = (cat: typeof categories[0], indent = '') => {
+            let line = `${indent}• **${cat.name}** (${cat.period})\n`;
+            line += `${indent}  Budget: $${cat.budgetAmount.toFixed(2)}\n`;
+            if (cat.children && cat.children.length > 0) {
+              cat.children.forEach(child => {
+                line += formatCategory(child, indent + '  ');
+              });
+            }
+            return line;
+          };
+
+          const categoryList = categories.map(cat => formatCategory(cat)).join('\n');
+
+          return {
+            content: [{ type: 'text', text: `💰 Budget Categories:\n\n${categoryList}` }]
+          };
+        } catch (error) {
+          console.error('Error in budget_get_categories:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Delete budget category
+    server.tool(
+      'budget_delete_category',
+      'Delete a budget category (fails if expenses exist)',
+      {
+        name: z.string().min(1).describe('Category name to delete'),
+      },
+      async (params) => {
+        try {
+          await deleteCategory(params.name);
+          return {
+            content: [{ type: 'text', text: `✅ Category "${params.name}" deleted.` }]
+          };
+        } catch (error) {
+          console.error('Error in budget_delete_category:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Add expense
+    server.tool(
+      'expense_add',
+      'Record a single expense transaction',
+      {
+        date: z.string().describe('Expense date (YYYY-MM-DD)'),
+        amount: z.number().min(0).describe('Expense amount'),
+        category: z.string().optional().describe('Category name (auto-categorizes if not provided)'),
+        description: z.string().min(1).describe('Description of the expense'),
+        merchantName: z.string().optional().describe('Merchant/vendor name'),
+        notes: z.string().optional().describe('Additional notes'),
+      },
+      async (params) => {
+        try {
+          const date = new Date(params.date);
+          if (isNaN(date.getTime())) {
+            return {
+              content: [{ type: 'text', text: '❌ Invalid date format. Use YYYY-MM-DD.' }]
+            };
+          }
+
+          const expense = await addExpense({
+            date,
+            amount: params.amount,
+            categoryName: params.category,
+            description: params.description,
+            merchantName: params.merchantName,
+            notes: params.notes,
+          });
+
+          return {
+            content: [{
+              type: 'text',
+              text: `✅ Expense recorded!\n\n` +
+                    `• Date: ${expense.date.toISOString().split('T')[0]}\n` +
+                    `• Amount: $${expense.amount.toFixed(2)}\n` +
+                    `• Category: ${expense.categoryName}\n` +
+                    `• Description: ${expense.description}\n` +
+                    (expense.merchantName ? `• Merchant: ${expense.merchantName}\n` : '')
+            }]
+          };
+        } catch (error) {
+          console.error('Error in expense_add:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Import expenses from CSV
+    server.tool(
+      'expense_import',
+      'Bulk import expenses from CSV data with auto-categorization',
+      {
+        csvData: z.string().min(1).describe('Raw CSV data as a string'),
+        dateColumn: z.string().describe('Name of the date column'),
+        amountColumn: z.string().describe('Name of the amount column'),
+        descriptionColumn: z.string().describe('Name of the description column'),
+        skipHeader: z.boolean().optional().describe('Skip the first row (default: true)'),
+      },
+      async (params) => {
+        try {
+          const result = await importExpenses(params);
+
+          let response = `📥 Import Results:\n\n`;
+          response += `• Imported: ${result.imported}\n`;
+          response += `• Skipped (duplicates): ${result.skipped}\n`;
+          response += `• Uncategorized: ${result.uncategorized.length}\n`;
+
+          if (result.errors.length > 0) {
+            response += `\n⚠️ Errors:\n`;
+            result.errors.slice(0, 5).forEach(err => {
+              response += `  • ${err}\n`;
+            });
+            if (result.errors.length > 5) {
+              response += `  ... and ${result.errors.length - 5} more errors\n`;
+            }
+          }
+
+          if (result.uncategorized.length > 0) {
+            response += `\n📋 Uncategorized items (need manual categorization):\n`;
+            result.uncategorized.slice(0, 10).forEach(item => {
+              response += `  • ${item.date}: $${item.amount.toFixed(2)} - ${item.description.substring(0, 50)}\n`;
+            });
+            if (result.uncategorized.length > 10) {
+              response += `  ... and ${result.uncategorized.length - 10} more items\n`;
+            }
+          }
+
+          return {
+            content: [{ type: 'text', text: response }]
+          };
+        } catch (error) {
+          console.error('Error in expense_import:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Get expenses
+    server.tool(
+      'expense_get',
+      'Query expenses with filters for date range, category, amount, etc.',
+      {
+        startDate: z.string().optional().describe('Start date (YYYY-MM-DD)'),
+        endDate: z.string().optional().describe('End date (YYYY-MM-DD)'),
+        category: z.string().optional().describe('Filter by category name'),
+        minAmount: z.number().optional().describe('Minimum amount'),
+        maxAmount: z.number().optional().describe('Maximum amount'),
+        source: z.enum(['MANUAL', 'BANK_IMPORT']).optional().describe('Filter by source'),
+        limit: z.number().int().min(1).max(100).optional().describe('Max results (default: 50)'),
+      },
+      async (params) => {
+        try {
+          const expenses = await getExpenses({
+            startDate: params.startDate ? new Date(params.startDate) : undefined,
+            endDate: params.endDate ? new Date(params.endDate) : undefined,
+            categoryName: params.category,
+            minAmount: params.minAmount,
+            maxAmount: params.maxAmount,
+            source: params.source,
+            limit: params.limit,
+          });
+
+          if (expenses.length === 0) {
+            return {
+              content: [{ type: 'text', text: 'No expenses found matching your criteria.' }]
+            };
+          }
+
+          const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+          const expenseList = expenses.map(exp =>
+            `• **${exp.date.toISOString().split('T')[0]}** - $${exp.amount.toFixed(2)}\n` +
+            `  Category: ${exp.categoryName}\n` +
+            `  ${exp.description}` +
+            (exp.merchantName ? ` (${exp.merchantName})` : '')
+          ).join('\n\n');
+
+          return {
+            content: [{
+              type: 'text',
+              text: `💸 Expenses (${expenses.length} items, Total: $${total.toFixed(2)}):\n\n${expenseList}`
+            }]
+          };
+        } catch (error) {
+          console.error('Error in expense_get:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Update expense
+    server.tool(
+      'expense_update',
+      'Modify an existing expense record',
+      {
+        id: z.string().uuid().describe('Expense ID to update'),
+        date: z.string().optional().describe('New date (YYYY-MM-DD)'),
+        amount: z.number().min(0).optional().describe('New amount'),
+        category: z.string().optional().describe('New category name'),
+        description: z.string().optional().describe('New description'),
+        notes: z.string().optional().describe('New notes'),
+      },
+      async (params) => {
+        try {
+          const expense = await updateExpense(params.id, {
+            date: params.date ? new Date(params.date) : undefined,
+            amount: params.amount,
+            categoryName: params.category,
+            description: params.description,
+            notes: params.notes,
+          });
+
+          return {
+            content: [{
+              type: 'text',
+              text: `✅ Expense updated!\n\n` +
+                    `• Date: ${expense.date.toISOString().split('T')[0]}\n` +
+                    `• Amount: $${expense.amount.toFixed(2)}\n` +
+                    `• Category: ${expense.categoryName}\n` +
+                    `• Description: ${expense.description}`
+            }]
+          };
+        } catch (error) {
+          console.error('Error in expense_update:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Delete expense
+    server.tool(
+      'expense_delete',
+      'Remove an expense record',
+      {
+        id: z.string().uuid().describe('Expense ID to delete'),
+      },
+      async (params) => {
+        try {
+          await deleteExpense(params.id);
+          return {
+            content: [{ type: 'text', text: '✅ Expense deleted.' }]
+          };
+        } catch (error) {
+          console.error('Error in expense_delete:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Get budget summary
+    server.tool(
+      'budget_get_summary',
+      'Get spending vs budget analysis by category for a period',
+      {
+        period: z.enum(['WEEKLY', 'FORTNIGHTLY', 'MONTHLY', 'QUARTERLY', 'YEARLY']).describe('Budget period to analyze'),
+        startDate: z.string().optional().describe('Custom start date (YYYY-MM-DD)'),
+        category: z.string().optional().describe('Focus on a specific category'),
+      },
+      async (params) => {
+        try {
+          const summary = await getBudgetSummary({
+            period: params.period,
+            startDate: params.startDate ? new Date(params.startDate) : undefined,
+            categoryName: params.category,
+          });
+
+          let response = `📊 Budget Summary (${summary.period})\n`;
+          response += `Period: ${summary.startDate.toISOString().split('T')[0]} to ${summary.endDate.toISOString().split('T')[0]}\n\n`;
+
+          const formatVariance = (variance: number) => {
+            if (variance >= 0) return `✅ $${variance.toFixed(2)} under`;
+            return `🔴 $${Math.abs(variance).toFixed(2)} over`;
+          };
+
+          summary.categories.forEach(cat => {
+            response += `**${cat.categoryName}**\n`;
+            response += `  Budget: $${cat.budgetAmount.toFixed(2)} | Spent: $${cat.actualAmount.toFixed(2)}\n`;
+            response += `  ${formatVariance(cat.variance)} (${cat.percentUsed.toFixed(0)}%)\n`;
+
+            if (cat.children && cat.children.length > 0) {
+              cat.children.forEach(child => {
+                response += `    • ${child.categoryName}: $${child.actualAmount.toFixed(2)} / $${child.budgetAmount.toFixed(2)}\n`;
+              });
+            }
+            response += '\n';
+          });
+
+          response += `---\n`;
+          response += `**TOTAL**: Budget $${summary.totals.budgeted.toFixed(2)} | Spent $${summary.totals.actual.toFixed(2)}\n`;
+          response += `${formatVariance(summary.totals.variance)} (${summary.totals.percentUsed.toFixed(0)}% used)`;
+
+          return {
+            content: [{ type: 'text', text: response }]
+          };
+        } catch (error) {
+          console.error('Error in budget_get_summary:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Get balance
+    server.tool(
+      'budget_get_balance',
+      'Get overall financial balance showing income vs expenses for a period',
+      {
+        period: z.enum(['WEEKLY', 'FORTNIGHTLY', 'MONTHLY', 'QUARTERLY', 'YEARLY']).describe('Period to analyze'),
+        startDate: z.string().optional().describe('Custom start date (YYYY-MM-DD)'),
+      },
+      async (params) => {
+        try {
+          const balance = await getBalance({
+            period: params.period,
+            startDate: params.startDate ? new Date(params.startDate) : undefined,
+          });
+
+          let response = `💵 Financial Balance (${balance.period})\n`;
+          response += `Period: ${balance.startDate.toISOString().split('T')[0]} to ${balance.endDate.toISOString().split('T')[0]}\n\n`;
+
+          response += `**Income**\n`;
+          response += `  Expected: $${balance.income.expected.toFixed(2)}\n`;
+          response += `  Actual: $${balance.income.actual.toFixed(2)}\n\n`;
+
+          response += `**Expenses**\n`;
+          response += `  Budgeted: $${balance.expenses.budgeted.toFixed(2)}\n`;
+          response += `  Actual: $${balance.expenses.actual.toFixed(2)}\n\n`;
+
+          response += `**Balance**\n`;
+          response += `  Projected: $${balance.balance.projected.toFixed(2)}\n`;
+          response += `  Actual: $${balance.balance.actual.toFixed(2)}\n`;
+
+          const actualStatus = balance.balance.actual >= 0 ? '✅ In the green!' : '🔴 In deficit';
+          response += `\n${actualStatus}`;
+
+          return {
+            content: [{ type: 'text', text: response }]
+          };
+        } catch (error) {
+          console.error('Error in budget_get_balance:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Set income source
+    server.tool(
+      'income_set_source',
+      'Create or update an income source with expected amount and pay day',
+      {
+        name: z.string().min(1).max(100).describe('Income source name (e.g., "Hall & Willcox")'),
+        expectedAmount: z.number().min(0).describe('Expected monthly income amount'),
+        payDay: z.number().int().min(1).max(31).describe('Day of month for payment (1-31, use 31 for end of month)'),
+      },
+      async (params) => {
+        try {
+          const source = await upsertIncomeSource(params);
+
+          return {
+            content: [{
+              type: 'text',
+              text: `✅ Income source configured!\n\n` +
+                    `• Name: ${source.name}\n` +
+                    `• Expected: $${source.expectedAmount.toFixed(2)}/month\n` +
+                    `• Pay Day: ${source.payDay === 31 ? 'End of month' : `Day ${source.payDay}`}`
+            }]
+          };
+        } catch (error) {
+          console.error('Error in income_set_source:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Get income sources
+    server.tool(
+      'income_get_sources',
+      'List all configured income sources',
+      {
+        activeOnly: z.boolean().optional().describe('Only show active sources (default: true)'),
+      },
+      async (params) => {
+        try {
+          const sources = await getIncomeSources(params);
+
+          if (sources.length === 0) {
+            return {
+              content: [{ type: 'text', text: 'No income sources found. Use income_set_source to add one.' }]
+            };
+          }
+
+          const total = sources.reduce((sum, src) => sum + src.expectedAmount, 0);
+          const sourceList = sources.map(src =>
+            `• **${src.name}**\n` +
+            `  Expected: $${src.expectedAmount.toFixed(2)}/month\n` +
+            `  Pay Day: ${src.payDay === 31 ? 'End of month' : `Day ${src.payDay}`}`
+          ).join('\n\n');
+
+          return {
+            content: [{
+              type: 'text',
+              text: `💼 Income Sources (Total: $${total.toFixed(2)}/month):\n\n${sourceList}`
+            }]
+          };
+        } catch (error) {
+          console.error('Error in income_get_sources:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Add income
+    server.tool(
+      'income_add',
+      'Record actual income received',
+      {
+        source: z.string().min(1).describe('Income source name'),
+        date: z.string().describe('Date received (YYYY-MM-DD)'),
+        amount: z.number().min(0).describe('Amount received'),
+        description: z.string().optional().describe('Additional description'),
+        bankReference: z.string().optional().describe('Bank reference for deduplication'),
+      },
+      async (params) => {
+        try {
+          const date = new Date(params.date);
+          if (isNaN(date.getTime())) {
+            return {
+              content: [{ type: 'text', text: '❌ Invalid date format. Use YYYY-MM-DD.' }]
+            };
+          }
+
+          const income = await addIncome({
+            sourceName: params.source,
+            date,
+            amount: params.amount,
+            description: params.description,
+            bankReference: params.bankReference,
+          });
+
+          return {
+            content: [{
+              type: 'text',
+              text: `✅ Income recorded!\n\n` +
+                    `• Source: ${income.sourceName}\n` +
+                    `• Date: ${income.date.toISOString().split('T')[0]}\n` +
+                    `• Amount: $${income.amount.toFixed(2)}`
+            }]
+          };
+        } catch (error) {
+          console.error('Error in income_add:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Get income
+    server.tool(
+      'income_get',
+      'Query income records with filters',
+      {
+        startDate: z.string().optional().describe('Start date (YYYY-MM-DD)'),
+        endDate: z.string().optional().describe('End date (YYYY-MM-DD)'),
+        source: z.string().optional().describe('Filter by source name'),
+        limit: z.number().int().min(1).max(100).optional().describe('Max results (default: 50)'),
+      },
+      async (params) => {
+        try {
+          const incomes = await getIncome({
+            startDate: params.startDate ? new Date(params.startDate) : undefined,
+            endDate: params.endDate ? new Date(params.endDate) : undefined,
+            sourceName: params.source,
+            limit: params.limit,
+          });
+
+          if (incomes.length === 0) {
+            return {
+              content: [{ type: 'text', text: 'No income records found matching your criteria.' }]
+            };
+          }
+
+          const total = incomes.reduce((sum, inc) => sum + inc.amount, 0);
+          const incomeList = incomes.map(inc =>
+            `• **${inc.date.toISOString().split('T')[0]}** - $${inc.amount.toFixed(2)}\n` +
+            `  Source: ${inc.sourceName}` +
+            (inc.description ? `\n  ${inc.description}` : '')
+          ).join('\n\n');
+
+          return {
+            content: [{
+              type: 'text',
+              text: `💰 Income Records (${incomes.length} items, Total: $${total.toFixed(2)}):\n\n${incomeList}`
+            }]
+          };
+        } catch (error) {
+          console.error('Error in income_get:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Add categorization rule
+    server.tool(
+      'categorization_add_rule',
+      'Add an auto-categorization rule for expense descriptions',
+      {
+        pattern: z.string().min(1).describe('Pattern to match (e.g., "Woolworths", "UBER EATS")'),
+        category: z.string().min(1).describe('Category name to assign'),
+        matchType: z.enum(['CONTAINS', 'STARTS_WITH', 'REGEX']).optional().describe('How to match the pattern (default: CONTAINS)'),
+        priority: z.number().int().min(0).optional().describe('Higher priority rules are checked first (default: 0)'),
+      },
+      async (params) => {
+        try {
+          const rule = await addCategorizationRule({
+            pattern: params.pattern,
+            categoryName: params.category,
+            matchType: params.matchType,
+            priority: params.priority,
+          });
+
+          return {
+            content: [{
+              type: 'text',
+              text: `✅ Categorization rule added!\n\n` +
+                    `• Pattern: "${rule.pattern}"\n` +
+                    `• Match Type: ${rule.matchType}\n` +
+                    `• Category: ${rule.categoryName}\n` +
+                    `• Priority: ${rule.priority}`
+            }]
+          };
+        } catch (error) {
+          console.error('Error in categorization_add_rule:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Get categorization rules
+    server.tool(
+      'categorization_get_rules',
+      'List all auto-categorization rules',
+      {
+        category: z.string().optional().describe('Filter by category name'),
+      },
+      async (params) => {
+        try {
+          const rules = await getCategorizationRules({
+            categoryName: params.category,
+          });
+
+          if (rules.length === 0) {
+            return {
+              content: [{ type: 'text', text: 'No categorization rules found. Use categorization_add_rule to create one.' }]
+            };
+          }
+
+          const ruleList = rules.map(rule =>
+            `• **"${rule.pattern}"** → ${rule.categoryName}\n` +
+            `  Type: ${rule.matchType} | Priority: ${rule.priority}\n` +
+            `  ID: ${rule.id}`
+          ).join('\n\n');
+
+          return {
+            content: [{ type: 'text', text: `🏷️ Categorization Rules (${rules.length}):\n\n${ruleList}` }]
+          };
+        } catch (error) {
+          console.error('Error in categorization_get_rules:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Delete categorization rule
+    server.tool(
+      'categorization_delete_rule',
+      'Remove a categorization rule',
+      {
+        id: z.string().uuid().describe('Rule ID to delete'),
+      },
+      async (params) => {
+        try {
+          await deleteCategorizationRule(params.id);
+          return {
+            content: [{ type: 'text', text: '✅ Categorization rule deleted.' }]
+          };
+        } catch (error) {
+          console.error('Error in categorization_delete_rule:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Suggest category
+    server.tool(
+      'categorization_suggest',
+      'Test auto-categorization for a description without saving',
+      {
+        description: z.string().min(1).describe('Description to categorize'),
+      },
+      async (params) => {
+        try {
+          const suggestion = await suggestCategory(params.description);
+
+          if (suggestion.matched) {
+            return {
+              content: [{
+                type: 'text',
+                text: `✅ Match found!\n\n` +
+                      `• Category: ${suggestion.categoryName}\n` +
+                      `• Matched by: "${suggestion.rule?.pattern}" (${suggestion.rule?.matchType})`
+              }]
+            };
+          }
+
+          return {
+            content: [{ type: 'text', text: `❓ No matching rule found for: "${params.description}"\n\nUse categorization_add_rule to create a rule for this pattern.` }]
+          };
+        } catch (error) {
+          console.error('Error in categorization_suggest:', error);
           return {
             content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
           };

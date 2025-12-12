@@ -200,6 +200,150 @@ export default function McpToolsPage() {
           </div>
         </div>
 
+        {/* Budget & Expense Tracking Tools Section */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 mb-8">
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
+            Budget & Expense Tracking Tools
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400 text-sm mb-6">
+            Track budgets, expenses, and income with auto-categorization and CSV import support.
+          </p>
+          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                💰 budget_set_category
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Create or update budget categories with amounts for different periods
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• name, period (weekly/monthly/quarterly/yearly)</div>
+                <div>• budgetAmount, parentName for subcategories</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                📋 budget_get_categories
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                List all budget categories with hierarchy and amounts
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• Filter by period, show active only</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                💸 expense_add
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Record single expenses with auto-categorization
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• date, amount, description</div>
+                <div>• category (optional - auto-categorizes if not provided)</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                📥 expense_import
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Bulk import from CSV with duplicate detection
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• csvData, dateColumn, amountColumn, descriptionColumn</div>
+                <div>• Auto-applies categorization rules</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                🔍 expense_get
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Query expenses with flexible filters
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• Filter by date range, category, amount</div>
+                <div>• Filter by source (manual vs bank import)</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                📊 budget_get_summary
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Spending vs budget analysis by category
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• Shows budget, actual, variance, % used</div>
+                <div>• Breakdown by parent/child categories</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                💵 budget_get_balance
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Overall income vs expenses balance
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• Expected vs actual income</div>
+                <div>• Budgeted vs actual expenses</div>
+                <div>• Net balance (projected and actual)</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                💼 income_set_source / income_add
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Configure income sources and record payments
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• name, expectedAmount, payDay</div>
+                <div>• Track actual income received</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                🏷️ categorization_add_rule
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Add auto-categorization rules for expenses
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• pattern, category, matchType</div>
+                <div>• CONTAINS, STARTS_WITH, or REGEX</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                🔮 categorization_suggest
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Test auto-categorization without saving
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• Returns matched category and rule</div>
+                <div>• Useful for testing patterns</div>
+              </div>
+            </div>
+          </div>
+          <div className="mt-6 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 rounded text-xs text-blue-700 dark:text-blue-300 max-w-2xl mx-auto">
+            Supports weekly, fortnightly, monthly, quarterly, and yearly budgets. CSV import for bank statements.
+          </div>
+        </div>
+
         <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-6 mb-8">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
             🔑 Authentication Required
