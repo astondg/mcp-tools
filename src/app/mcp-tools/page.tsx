@@ -93,6 +93,113 @@ export default function McpToolsPage() {
           </div>
         </div>
 
+        {/* Vehicle Maintenance Tools Section */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 mb-8">
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
+            Vehicle Maintenance Tools
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400 text-sm mb-6">
+            Track vehicle services, parts, and maintenance schedules with these tools.
+          </p>
+          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                🚗 vehicle_manage
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Add, update, or delete vehicles from your fleet
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• action: add, update, or delete</div>
+                <div>• name, make, model, year, vin, odometer</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                📋 vehicle_list
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                List all tracked vehicles with current odometer readings
+              </p>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                🔧 vehicle_add_service
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Log a service with date, type, cost, provider, and parts used
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• vehicleId, serviceDate, serviceType</div>
+                <div>• odometer, cost, provider, notes</div>
+                <div>• parts: inline part creation with quantity</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                📜 vehicle_get_services
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Get service history with optional filters
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• Filter by vehicle, type, date range</div>
+                <div>• Includes parts used in each service</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                🔩 vehicle_add_part / vehicle_get_parts
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Register and search reusable parts with manufacturer, part number, cost, and purchase URL
+              </p>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                📅 vehicle_set_schedule
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Create maintenance schedules with km and/or time intervals
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• intervalKm: e.g., every 10,000 km</div>
+                <div>• intervalMonths: e.g., every 6 months</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                🚨 vehicle_get_upcoming
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Get overdue and upcoming maintenance items based on schedules and current odometer
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• Shows overdue items with km/days overdue</div>
+                <div>• Shows due soon items with km/days remaining</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                ⚙️ vehicle_manage_service / vehicle_get_schedules
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Update/delete service records and view all maintenance schedules for a vehicle
+              </p>
+            </div>
+          </div>
+          <div className="mt-6 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 rounded text-xs text-blue-700 dark:text-blue-300 max-w-2xl mx-auto">
+            Requires Vercel Postgres database. Data persists across sessions.
+          </div>
+        </div>
+
         <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-6 mb-8">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
             🔑 Authentication Required

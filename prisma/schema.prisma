@@ -1,0 +1,105 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+// ==========================================
+// Vehicle Maintenance Tracking System
+// ==========================================
+
+model Vehicle {
+  id              String   @id @default(uuid())
+  name            String   // Display name (e.g., "Family SUV")
+  make            String   // Manufacturer (e.g., "Toyota")
+  model           String   // Model name (e.g., "RAV4")
+  year            Int?     // Model year
+  vin             String?  @unique // Vehicle Identification Number
+  licensePlate    String?  @map("license_plate")
+  currentOdometer Int      @default(0) @map("current_odometer") // In kilometers
+  notes           String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  serviceRecords       ServiceRecord[]
+  maintenanceSchedules MaintenanceSchedule[]
+
+  @@map("vehicles")
+}
+
+model ServiceRecord {
+  id          String   @id @default(uuid())
+  vehicleId   String   @map("vehicle_id")
+  serviceDate DateTime @map("service_date") @db.Date
+  serviceType String   @map("service_type") // e.g., 'oil_change', 'tire_rotation'
+  odometer    Int?     // Odometer reading at time of service (km)
+  cost        Decimal? @db.Decimal(10, 2) // Total cost
+  provider    String?  // Service provider name
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  vehicle      Vehicle       @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  serviceParts ServicePart[]
+
+  @@map("service_records")
+}
+
+model Part {
+  id           String   @id @default(uuid())
+  name         String   // Part name (e.g., "Spark Plug")
+  manufacturer String?  // Brand (e.g., "NGK")
+  model        String?  // Model name
+  partNumber   String?  @map("part_number") // OEM/aftermarket part number
+  description  String?
+  cost         Decimal? @db.Decimal(10, 2) // Unit cost
+  url          String?  // Link to product page
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  serviceParts ServicePart[]
+
+  @@map("parts")
+}
+
+model ServicePart {
+  id              String   @id @default(uuid())
+  serviceRecordId String   @map("service_record_id")
+  partId          String   @map("part_id")
+  quantity        Int      @default(1)
+  costPerUnit     Decimal? @map("cost_per_unit") @db.Decimal(10, 2) // Cost at time of service
+  notes           String?
+
+  // Relations
+  serviceRecord ServiceRecord @relation(fields: [serviceRecordId], references: [id], onDelete: Cascade)
+  part          Part          @relation(fields: [partId], references: [id])
+
+  @@map("service_parts")
+}
+
+model MaintenanceSchedule {
+  id                    String    @id @default(uuid())
+  vehicleId             String    @map("vehicle_id")
+  name                  String    // Schedule name (e.g., "Oil Change")
+  serviceType           String    @map("service_type") // Matches service record types
+  intervalKm            Int?      @map("interval_km") // Every X kilometers
+  intervalMonths        Int?      @map("interval_months") // Every X months
+  lastPerformedDate     DateTime? @map("last_performed_date") @db.Date
+  lastPerformedOdometer Int?      @map("last_performed_odometer")
+  enabled               Boolean   @default(true)
+  notes                 String?
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@map("maintenance_schedules")
+}
