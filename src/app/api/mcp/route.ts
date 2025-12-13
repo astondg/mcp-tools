@@ -1396,6 +1396,7 @@ const handler = createMcpHandler(
 
           const recordList = records.map(r => {
             let entry = `• **${r.serviceType}** on ${r.serviceDate.toISOString().split('T')[0]}\n` +
+              `  ID: ${r.id}\n` +
               `  Vehicle: ${r.vehicleName}\n` +
               (r.odometer ? `  Odometer: ${r.odometer.toLocaleString()} km\n` : '') +
               (r.cost !== null ? `  Cost paid: $${r.cost.toFixed(2)}\n` : '') +
@@ -1820,6 +1821,7 @@ const handler = createMcpHandler(
 
           const formatCategory = (cat: typeof categories[0], indent = '') => {
             let line = `${indent}• **${cat.name}** (${cat.period})\n`;
+            line += `${indent}  ID: ${cat.id}\n`;
             line += `${indent}  Budget: $${cat.budgetAmount.toFixed(2)}\n`;
             if (cat.children && cat.children.length > 0) {
               cat.children.forEach(child => {
@@ -2046,6 +2048,7 @@ const handler = createMcpHandler(
           const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
           const expenseList = expenses.map(exp =>
             `• **${exp.date.toISOString().split('T')[0]}** - $${exp.amount.toFixed(2)}\n` +
+            `  ID: ${exp.id}\n` +
             `  Category: ${exp.categoryName}\n` +
             `  ${exp.description}` +
             (exp.merchantName ? ` (${exp.merchantName})` : '')
@@ -2279,6 +2282,7 @@ const handler = createMcpHandler(
           const total = sources.reduce((sum, src) => sum + src.expectedAmount, 0);
           const sourceList = sources.map(src =>
             `• **${src.name}**\n` +
+            `  ID: ${src.id}\n` +
             `  Expected: $${src.expectedAmount.toFixed(2)}/month\n` +
             `  Pay Day: ${src.payDay === 31 ? 'End of month' : `Day ${src.payDay}`}`
           ).join('\n\n');
@@ -2372,6 +2376,7 @@ const handler = createMcpHandler(
           const total = incomes.reduce((sum, inc) => sum + inc.amount, 0);
           const incomeList = incomes.map(inc =>
             `• **${inc.date.toISOString().split('T')[0]}** - $${inc.amount.toFixed(2)}\n` +
+            `  ID: ${inc.id}\n` +
             `  Source: ${inc.sourceName}` +
             (inc.description ? `\n  ${inc.description}` : '')
           ).join('\n\n');
