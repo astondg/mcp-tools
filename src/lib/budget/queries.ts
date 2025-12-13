@@ -1044,6 +1044,12 @@ export async function getIncome(filters: {
   }));
 }
 
+export async function deleteIncome(id: string): Promise<void> {
+  await prisma.income.delete({
+    where: { id },
+  });
+}
+
 // ==========================================
 // Balance Analysis
 // ==========================================

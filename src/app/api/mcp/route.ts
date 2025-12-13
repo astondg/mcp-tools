@@ -38,6 +38,7 @@ import {
   getIncomeSources,
   addIncome,
   getIncome,
+  deleteIncome,
   getAnnualBudgetSummary,
   getExpenseTotals,
   getIncomeTotals,
@@ -2394,6 +2395,28 @@ const handler = createMcpHandler(
           };
         } catch (error) {
           console.error('Error in income_get:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Delete income
+    server.tool(
+      'income_delete',
+      'Delete an income record by ID',
+      {
+        id: z.string().min(1).describe('Income record ID to delete'),
+      },
+      async (params) => {
+        try {
+          await deleteIncome(params.id);
+          return {
+            content: [{ type: 'text', text: `✅ Income record "${params.id}" deleted.` }]
+          };
+        } catch (error) {
+          console.error('Error in income_delete:', error);
           return {
             content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
           };
