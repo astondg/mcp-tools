@@ -579,9 +579,18 @@ export async function importExpenses(data: {
     bankReference: string;
   }> = [];
 
+  // Track bank references we're adding in this batch to avoid duplicates within the CSV
+  const batchRefs = new Set<string>();
+
   for (const row of parsedRows) {
-    // Skip duplicates
+    // Skip duplicates from database
     if (existingRefs.has(row.bankReference)) {
+      result.skipped++;
+      continue;
+    }
+
+    // Skip duplicates within this batch (same transaction appearing twice in CSV)
+    if (batchRefs.has(row.bankReference)) {
       result.skipped++;
       continue;
     }
@@ -625,12 +634,14 @@ export async function importExpenses(data: {
         source: 'BANK_IMPORT',
         bankReference: row.bankReference,
       });
+      batchRefs.add(row.bankReference);
     } else {
       result.uncategorized.push({
         description: row.description,
         amount: row.amount,
         date: row.dateStr,
       });
+      batchRefs.add(row.bankReference);
     }
   }
 
