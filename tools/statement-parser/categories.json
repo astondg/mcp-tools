@@ -121,7 +121,9 @@
     {"pattern": "THE HARDWARE CLUB", "category": "Dining Out"},
     {"pattern": "THE BLOW", "category": "Health & Beauty"},
     {"pattern": "CLAY HEALTH", "category": "Health & Beauty"},
-    {"pattern": "ASSEMBLY", "category": "Dining Out"}
+    {"pattern": "ASSEMBLY", "category": "Dining Out"},
+    {"pattern": "DNV", "category": "Dining Out"},
+    {"pattern": "MEEQ", "category": "Shopping"}
   ],
   "default_category": "Uncategorized"
 }
