@@ -1833,6 +1833,46 @@ const handler = createMcpHandler(
       }
     );
 
+    // List category names (machine-readable for scripts/parsers)
+    server.tool(
+      'budget_list_category_names',
+      'Get a simple list of all budget category names (for scripts and parsers)',
+      {
+        activeOnly: z.boolean().optional().describe('Only show active categories (default: true)'),
+      },
+      async (params) => {
+        try {
+          const categories = await getCategories({ activeOnly: params.activeOnly });
+
+          // Flatten categories including children
+          const names: string[] = [];
+          const collectNames = (cats: typeof categories) => {
+            for (const cat of cats) {
+              names.push(cat.name);
+              if (cat.children) {
+                for (const child of cat.children) {
+                  names.push(child.name);
+                }
+              }
+            }
+          };
+          collectNames(categories);
+
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({ categories: names.sort() }, null, 2)
+            }]
+          };
+        } catch (error) {
+          console.error('Error in budget_list_category_names:', error);
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }) }]
+          };
+        }
+      }
+    );
+
     // Delete budget category
     server.tool(
       'budget_delete_category',

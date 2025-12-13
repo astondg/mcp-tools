@@ -7,17 +7,21 @@ Merchant names never leave your machine.
 
 Usage:
     python parse_statement.py <statement_file> [--output OUTPUT]
-    python parse_statement.py <statement_file> --llm  # Use LLM for unknowns
+    python parse_statement.py <statement_file> --llm  # Use Apple Foundation Models for unknowns
 
 Examples:
     python parse_statement.py statement.csv
-    python parse_statement.py statement.csv --llm --model qwen2.5:7b
+    python parse_statement.py statement.csv --llm
+    python parse_statement.py statement.csv --fetch-categories  # Sync categories from MCP server
 """
 
 import argparse
 import csv
 import json
+import subprocess
 import sys
+import urllib.request
+import urllib.error
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Set
@@ -191,26 +195,111 @@ def categorize(description: str, rules: List[Dict], default: str) -> str:
     return default
 
 
-def categorize_with_llm(descriptions: Set[str], model: str) -> Dict[str, str]:
-    """Use local LLM to categorize unknown merchants."""
+def fetch_categories_from_server(server_url: str) -> List[str]:
+    """Fetch valid categories from the MCP server."""
     try:
-        import ollama
-    except ImportError:
-        print("Error: ollama package not installed. Run: pip install ollama", file=sys.stderr)
-        return {}
+        # Call the MCP server's budget_list_category_names tool
+        # MCP uses JSON-RPC, so we need to construct the proper request
+        request_data = json.dumps({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "budget_list_category_names",
+                "arguments": {}
+            }
+        }).encode('utf-8')
 
-    # Check Ollama is running
-    try:
-        ollama.list()
+        req = urllib.request.Request(
+            server_url,
+            data=request_data,
+            headers={'Content-Type': 'application/json'},
+            method='POST'
+        )
+
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode('utf-8'))
+
+            # Parse the response - MCP returns content as text
+            if 'result' in data and 'content' in data['result']:
+                content = data['result']['content']
+                if content and len(content) > 0:
+                    # Parse the JSON from the text content
+                    result = json.loads(content[0].get('text', '{}'))
+                    return result.get('categories', [])
+
+        return []
+    except urllib.error.URLError as e:
+        print(f"Warning: Could not fetch categories from server: {e}", file=sys.stderr)
+        return []
     except Exception as e:
-        print(f"Error: Cannot connect to Ollama. Is it running? (ollama serve)", file=sys.stderr)
+        print(f"Warning: Error fetching categories: {e}", file=sys.stderr)
+        return []
+
+
+def categorize_with_afm(descriptions: Set[str], valid_categories: List[str]) -> Dict[str, str]:
+    """Use Apple Foundation Models (via afm CLI) to categorize unknown merchants."""
+    # Check if afm is available
+    try:
+        result = subprocess.run(['which', 'afm'], capture_output=True, text=True)
+        if result.returncode != 0:
+            print("Error: afm not found. Install with: brew tap scouzi1966/afm && brew install afm", file=sys.stderr)
+            return {}
+    except Exception as e:
+        print(f"Error checking for afm: {e}", file=sys.stderr)
         return {}
 
     results = {}
-    categories_list = ", ".join(VALID_CATEGORIES[:-1])  # Exclude "Uncategorized"
+    categories_list = ", ".join(c for c in valid_categories if c != "Uncategorized")
 
-    print(f"Categorizing {len(descriptions)} unknown merchants with LLM...")
+    print(f"Categorizing {len(descriptions)} unknown merchants with Apple Foundation Models...")
 
+    # Batch all descriptions into a single prompt for efficiency
+    if len(descriptions) > 1:
+        # For multiple items, batch them
+        batch_prompt = f"""Categorize each merchant into exactly one category from this list:
+{categories_list}
+
+Merchants to categorize:
+"""
+        for i, desc in enumerate(descriptions, 1):
+            batch_prompt += f"{i}. {desc}\n"
+
+        batch_prompt += "\nRespond with ONLY the category for each, one per line, in the same order. No explanations."
+
+        try:
+            result = subprocess.run(
+                ['afm', '-s', batch_prompt],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')
+                desc_list = list(descriptions)
+
+                for i, (desc, line) in enumerate(zip(desc_list, lines)):
+                    # Clean up the response line
+                    category = line.strip()
+                    # Remove any numbering prefix like "1. " or "1: "
+                    if category and category[0].isdigit():
+                        category = category.lstrip('0123456789.-): ').strip()
+
+                    # Validate it's a known category
+                    matched_category = match_category(category, valid_categories)
+                    results[desc] = matched_category
+                    print(f"  {desc[:35]:<35} → {matched_category}")
+
+                return results
+            else:
+                print(f"AFM batch error: {result.stderr}", file=sys.stderr)
+        except subprocess.TimeoutExpired:
+            print("AFM batch timed out, falling back to individual requests", file=sys.stderr)
+        except Exception as e:
+            print(f"AFM batch error: {e}, falling back to individual requests", file=sys.stderr)
+
+    # Fallback: process one at a time
     for desc in descriptions:
         prompt = f"""Categorize this merchant into exactly one category.
 
@@ -221,34 +310,51 @@ Categories: {categories_list}
 Reply with ONLY the category name, nothing else."""
 
         try:
-            response = ollama.chat(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                options={"temperature": 0, "num_predict": 20}
+            result = subprocess.run(
+                ['afm', '-s', prompt],
+                capture_output=True,
+                text=True,
+                timeout=30
             )
 
-            category = response["message"]["content"].strip()
-
-            # Validate it's a known category
-            if category in VALID_CATEGORIES:
-                results[desc] = category
-                print(f"  {desc[:30]:<30} → {category}")
+            if result.returncode == 0:
+                category = result.stdout.strip()
+                matched_category = match_category(category, valid_categories)
+                results[desc] = matched_category
+                print(f"  {desc[:35]:<35} → {matched_category}")
             else:
-                # Try to match partial
-                for valid in VALID_CATEGORIES:
-                    if valid.lower() in category.lower():
-                        results[desc] = valid
-                        print(f"  {desc[:30]:<30} → {valid}")
-                        break
-                else:
-                    results[desc] = "Uncategorized"
-                    print(f"  {desc[:30]:<30} → Uncategorized (LLM said: {category})")
+                print(f"  {desc[:35]:<35} → Uncategorized (AFM error)")
+                results[desc] = "Uncategorized"
 
+        except subprocess.TimeoutExpired:
+            print(f"  {desc[:35]:<35} → Uncategorized (timeout)")
+            results[desc] = "Uncategorized"
         except Exception as e:
             print(f"  Error categorizing '{desc[:30]}': {e}", file=sys.stderr)
             results[desc] = "Uncategorized"
 
     return results
+
+
+def match_category(response: str, valid_categories: List[str]) -> str:
+    """Match LLM response to a valid category."""
+    response = response.strip()
+
+    # Exact match
+    if response in valid_categories:
+        return response
+
+    # Case-insensitive match
+    for valid in valid_categories:
+        if valid.lower() == response.lower():
+            return valid
+
+    # Partial match
+    for valid in valid_categories:
+        if valid.lower() in response.lower() or response.lower() in valid.lower():
+            return valid
+
+    return "Uncategorized"
 
 
 def detect_format(headers: List[str]) -> Optional[str]:
@@ -281,7 +387,7 @@ def parse_date(date_str: str, fmt: str) -> str:
 
 
 def parse_csv(file_path: Path, format_name: Optional[str], categories_config: Dict,
-              use_llm: bool = False, llm_model: str = "qwen2.5:7b",
+              use_llm: bool = False, valid_categories: Optional[List[str]] = None,
               exclude_transfers: bool = False) -> Dict:
     """Parse CSV bank statement and return anonymized, categorized data."""
     transactions = []  # Store all transactions with original descriptions temporarily
@@ -371,10 +477,12 @@ def parse_csv(file_path: Path, format_name: Optional[str], categories_config: Di
                 print(f"Warning: Skipping row: {e}", file=sys.stderr)
                 continue
 
-    # Use LLM for uncategorized if requested
+    # Use Apple Foundation Models for uncategorized if requested
     llm_categories = {}
     if use_llm and uncategorized_descriptions:
-        llm_categories = categorize_with_llm(uncategorized_descriptions, llm_model)
+        # Use provided categories or fall back to built-in list
+        cats_for_llm = valid_categories if valid_categories else VALID_CATEGORIES
+        llm_categories = categorize_with_afm(uncategorized_descriptions, cats_for_llm)
 
         # Apply LLM categories
         for tx in transactions:
@@ -462,10 +570,13 @@ def main():
 Examples:
   python parse_statement.py statement.csv
   python parse_statement.py statement.csv --llm
-  python parse_statement.py statement.csv --llm --model qwen2.5:7b
+  python parse_statement.py statement.csv --llm --fetch-categories
 
 Privacy: Merchant names are used for categorization locally but NEVER included
 in the output. Only categories and amounts are exported.
+
+LLM: Uses Apple Foundation Models via the 'afm' CLI tool.
+Install with: brew tap scouzi1966/afm && brew install afm
         """
     )
     parser.add_argument("file", type=Path, help="Bank statement CSV file")
@@ -473,8 +584,10 @@ in the output. Only categories and amounts are exported.
     parser.add_argument("--output", "-o", type=Path, help="Output JSON file")
     parser.add_argument("--csv", action="store_true", help="Also generate CSV for import")
     parser.add_argument("--categories", "-c", type=Path, help="Custom categories JSON file")
-    parser.add_argument("--llm", action="store_true", help="Use local LLM for uncategorized merchants")
-    parser.add_argument("--model", "-m", default="qwen2.5:7b", help="Ollama model for LLM categorization")
+    parser.add_argument("--llm", action="store_true", help="Use Apple Foundation Models for uncategorized merchants")
+    parser.add_argument("--fetch-categories", action="store_true", help="Fetch valid categories from MCP server before categorizing")
+    parser.add_argument("--server", "-s", default="https://mcp-tools-one.vercel.app/api/mcp",
+                        help="MCP server URL (default: https://mcp-tools-one.vercel.app/api/mcp)")
     parser.add_argument("--exclude-transfers", action="store_true", help="Exclude Transfer transactions from output")
 
     args = parser.parse_args()
@@ -482,6 +595,19 @@ in the output. Only categories and amounts are exported.
     if not args.file.exists():
         print(f"Error: File not found: {args.file}", file=sys.stderr)
         sys.exit(1)
+
+    # Fetch categories from server if requested
+    server_categories = None
+    if args.fetch_categories:
+        print(f"Fetching categories from: {args.server}")
+        server_categories = fetch_categories_from_server(args.server)
+        if server_categories:
+            print(f"Fetched {len(server_categories)} categories from server")
+            # Update VALID_CATEGORIES for rule-based matching too
+            global VALID_CATEGORIES
+            VALID_CATEGORIES = server_categories + ["Uncategorized"]
+        else:
+            print("Warning: Could not fetch categories, using built-in list", file=sys.stderr)
 
     # Load categorization rules
     categories_path = args.categories or (Path(__file__).parent / "categories.json")
@@ -495,7 +621,7 @@ in the output. Only categories and amounts are exported.
         args.format,
         categories_config,
         use_llm=args.llm,
-        llm_model=args.model,
+        valid_categories=server_categories,
         exclude_transfers=args.exclude_transfers
     )
 
