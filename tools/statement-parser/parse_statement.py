@@ -196,39 +196,25 @@ def categorize(description: str, rules: List[Dict], default: str) -> str:
 
 
 def fetch_categories_from_server(server_url: str) -> List[str]:
-    """Fetch valid categories from the MCP server."""
+    """Fetch valid categories from the server's REST API."""
     try:
-        # Call the MCP server's budget_list_category_names tool
-        # MCP uses JSON-RPC, so we need to construct the proper request
-        request_data = json.dumps({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {
-                "name": "budget_list_category_names",
-                "arguments": {}
-            }
-        }).encode('utf-8')
+        # Use the simple REST endpoint instead of MCP protocol
+        # Convert MCP URL to REST API URL
+        if '/api/mcp' in server_url:
+            api_url = server_url.replace('/api/mcp', '/api/budget/categories')
+        else:
+            api_url = server_url.rstrip('/') + '/api/budget/categories'
 
         req = urllib.request.Request(
-            server_url,
-            data=request_data,
-            headers={'Content-Type': 'application/json'},
-            method='POST'
+            api_url,
+            headers={'Accept': 'application/json'},
+            method='GET'
         )
 
         with urllib.request.urlopen(req, timeout=10) as response:
             data = json.loads(response.read().decode('utf-8'))
+            return data.get('categories', [])
 
-            # Parse the response - MCP returns content as text
-            if 'result' in data and 'content' in data['result']:
-                content = data['result']['content']
-                if content and len(content) > 0:
-                    # Parse the JSON from the text content
-                    result = json.loads(content[0].get('text', '{}'))
-                    return result.get('categories', [])
-
-        return []
     except urllib.error.URLError as e:
         print(f"Warning: Could not fetch categories from server: {e}", file=sys.stderr)
         return []
