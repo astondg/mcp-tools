@@ -12,6 +12,16 @@ import type {
   ImportResult,
   CategorizationSuggestion,
   CategorySummary,
+  AnnualBudgetSummaryResponse,
+  AnnualCategorySummary,
+  ExpenseGroupBy,
+  ExpenseTotalsResponse,
+  ExpenseTotalItem,
+  IncomeGroupBy,
+  IncomeTotalsResponse,
+  IncomeTotalItem,
+  BudgetVsActualsResponse,
+  BudgetVsActualCategory,
 } from './types';
 
 // Helper to convert Decimal to number
@@ -1119,6 +1129,415 @@ export async function getBalance(filters: {
     balance: {
       projected: expectedIncome - budgetedExpenses,
       actual: actualIncome - actualExpenses,
+    },
+  };
+}
+
+// ==========================================
+// Annual Budget Analysis
+// ==========================================
+
+// Helper to annualize budget based on period
+function annualizeBudget(amount: number, period: BudgetPeriod): number {
+  switch (period) {
+    case 'WEEKLY':
+      return amount * 52;
+    case 'FORTNIGHTLY':
+      return amount * 26;
+    case 'MONTHLY':
+      return amount * 12;
+    case 'QUARTERLY':
+      return amount * 4;
+    case 'YEARLY':
+      return amount;
+  }
+}
+
+export async function getAnnualBudgetSummary(filters: {
+  year?: number;
+}): Promise<AnnualBudgetSummaryResponse> {
+  const year = filters.year || new Date().getFullYear();
+  const startDate = new Date(year, 0, 1, 0, 0, 0, 0);
+  const endDate = new Date(year, 11, 31, 23, 59, 59, 999);
+
+  // Get all active categories with their expenses for the year
+  const categories = await prisma.budgetCategory.findMany({
+    where: {
+      isActive: true,
+      parentId: null, // Top-level only
+    },
+    include: {
+      children: {
+        where: { isActive: true },
+        include: {
+          expenses: {
+            where: {
+              date: { gte: startDate, lte: endDate },
+            },
+          },
+        },
+      },
+      expenses: {
+        where: {
+          date: { gte: startDate, lte: endDate },
+        },
+      },
+    },
+    orderBy: { name: 'asc' },
+  });
+
+  const summaries: AnnualCategorySummary[] = [];
+  let totalAnnualizedBudget = 0;
+  let totalYtdActual = 0;
+
+  for (const cat of categories) {
+    const periodBudget = decimalToNumber(cat.budgetAmount);
+    const annualizedBudget = annualizeBudget(periodBudget, cat.period);
+    const directActual = cat.expenses.reduce(
+      (sum, exp) => sum + decimalToNumber(exp.amount),
+      0
+    );
+
+    // Process children
+    const childSummaries: AnnualCategorySummary[] = cat.children.map((child) => {
+      const childPeriodBudget = decimalToNumber(child.budgetAmount);
+      const childAnnualized = annualizeBudget(childPeriodBudget, child.period);
+      const childActual = child.expenses.reduce(
+        (sum, exp) => sum + decimalToNumber(exp.amount),
+        0
+      );
+
+      return {
+        categoryId: child.id,
+        categoryName: child.name,
+        parentName: cat.name,
+        period: child.period,
+        periodBudget: childPeriodBudget,
+        annualizedBudget: childAnnualized,
+        ytdActual: childActual,
+        variance: childAnnualized - childActual,
+        percentUsed: childAnnualized > 0 ? (childActual / childAnnualized) * 100 : 0,
+      };
+    });
+
+    const childAnnualizedTotal = childSummaries.reduce((sum, c) => sum + c.annualizedBudget, 0);
+    const childActualTotal = childSummaries.reduce((sum, c) => sum + c.ytdActual, 0);
+    const totalAnnualized = annualizedBudget + childAnnualizedTotal;
+    const totalActual = directActual + childActualTotal;
+
+    summaries.push({
+      categoryId: cat.id,
+      categoryName: cat.name,
+      parentName: null,
+      period: cat.period,
+      periodBudget,
+      annualizedBudget: totalAnnualized,
+      ytdActual: totalActual,
+      variance: totalAnnualized - totalActual,
+      percentUsed: totalAnnualized > 0 ? (totalActual / totalAnnualized) * 100 : 0,
+      children: childSummaries.length > 0 ? childSummaries : undefined,
+    });
+
+    totalAnnualizedBudget += totalAnnualized;
+    totalYtdActual += totalActual;
+  }
+
+  return {
+    year,
+    startDate,
+    endDate,
+    categories: summaries,
+    totals: {
+      annualizedBudget: totalAnnualizedBudget,
+      ytdActual: totalYtdActual,
+      variance: totalAnnualizedBudget - totalYtdActual,
+      percentUsed: totalAnnualizedBudget > 0 ? (totalYtdActual / totalAnnualizedBudget) * 100 : 0,
+    },
+  };
+}
+
+// ==========================================
+// Expense Totals
+// ==========================================
+
+export async function getExpenseTotals(filters: {
+  startDate: Date;
+  endDate: Date;
+  groupBy: ExpenseGroupBy;
+}): Promise<ExpenseTotalsResponse> {
+  const expenses = await prisma.expense.findMany({
+    where: {
+      date: {
+        gte: filters.startDate,
+        lte: filters.endDate,
+      },
+    },
+    include: {
+      category: true,
+    },
+    orderBy: { date: 'asc' },
+  });
+
+  const groupedTotals = new Map<string, { label: string; total: number; count: number }>();
+
+  for (const expense of expenses) {
+    let groupKey: string;
+    let groupLabel: string;
+
+    switch (filters.groupBy) {
+      case 'category':
+        groupKey = expense.category.name;
+        groupLabel = expense.category.name;
+        break;
+      case 'month':
+        const monthDate = expense.date;
+        groupKey = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}`;
+        groupLabel = monthDate.toLocaleDateString('en-AU', { year: 'numeric', month: 'long' });
+        break;
+      case 'week':
+        // Calculate ISO week number
+        const d = new Date(expense.date);
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+        const week1 = new Date(d.getFullYear(), 0, 4);
+        const weekNum = 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+        groupKey = `${d.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+        groupLabel = `Week ${weekNum}, ${d.getFullYear()}`;
+        break;
+    }
+
+    const existing = groupedTotals.get(groupKey) || { label: groupLabel, total: 0, count: 0 };
+    existing.total += decimalToNumber(expense.amount);
+    existing.count += 1;
+    groupedTotals.set(groupKey, existing);
+  }
+
+  const items: ExpenseTotalItem[] = Array.from(groupedTotals.entries())
+    .map(([groupKey, data]) => ({
+      groupKey,
+      groupLabel: data.label,
+      total: data.total,
+      count: data.count,
+    }))
+    .sort((a, b) => {
+      // Sort by key (alphabetically for categories, chronologically for dates)
+      return a.groupKey.localeCompare(b.groupKey);
+    });
+
+  const grandTotal = items.reduce((sum, item) => sum + item.total, 0);
+  const transactionCount = items.reduce((sum, item) => sum + item.count, 0);
+
+  return {
+    startDate: filters.startDate,
+    endDate: filters.endDate,
+    groupBy: filters.groupBy,
+    items,
+    grandTotal,
+    transactionCount,
+  };
+}
+
+// ==========================================
+// Income Totals
+// ==========================================
+
+export async function getIncomeTotals(filters: {
+  startDate: Date;
+  endDate: Date;
+  groupBy: IncomeGroupBy;
+}): Promise<IncomeTotalsResponse> {
+  const incomes = await prisma.income.findMany({
+    where: {
+      date: {
+        gte: filters.startDate,
+        lte: filters.endDate,
+      },
+    },
+    include: {
+      source: true,
+    },
+    orderBy: { date: 'asc' },
+  });
+
+  const groupedTotals = new Map<string, { label: string; total: number; count: number }>();
+
+  for (const income of incomes) {
+    let groupKey: string;
+    let groupLabel: string;
+
+    switch (filters.groupBy) {
+      case 'source':
+        groupKey = income.source.name;
+        groupLabel = income.source.name;
+        break;
+      case 'month':
+        const monthDate = income.date;
+        groupKey = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}`;
+        groupLabel = monthDate.toLocaleDateString('en-AU', { year: 'numeric', month: 'long' });
+        break;
+    }
+
+    const existing = groupedTotals.get(groupKey) || { label: groupLabel, total: 0, count: 0 };
+    existing.total += decimalToNumber(income.amount);
+    existing.count += 1;
+    groupedTotals.set(groupKey, existing);
+  }
+
+  const items: IncomeTotalItem[] = Array.from(groupedTotals.entries())
+    .map(([groupKey, data]) => ({
+      groupKey,
+      groupLabel: data.label,
+      total: data.total,
+      count: data.count,
+    }))
+    .sort((a, b) => a.groupKey.localeCompare(b.groupKey));
+
+  const grandTotal = items.reduce((sum, item) => sum + item.total, 0);
+  const transactionCount = items.reduce((sum, item) => sum + item.count, 0);
+
+  return {
+    startDate: filters.startDate,
+    endDate: filters.endDate,
+    groupBy: filters.groupBy,
+    items,
+    grandTotal,
+    transactionCount,
+  };
+}
+
+// ==========================================
+// Budget vs Actuals Comparison
+// ==========================================
+
+export async function getBudgetVsActuals(filters: {
+  year?: number;
+}): Promise<BudgetVsActualsResponse> {
+  const year = filters.year || new Date().getFullYear();
+  const now = new Date();
+  const startDate = new Date(year, 0, 1, 0, 0, 0, 0);
+  const endDate = now.getFullYear() === year ? now : new Date(year, 11, 31, 23, 59, 59, 999);
+
+  // Calculate days elapsed and remaining
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const daysElapsed = Math.floor((endDate.getTime() - startDate.getTime()) / msPerDay) + 1;
+  const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
+  const totalDaysInYear = Math.floor((yearEnd.getTime() - startDate.getTime()) / msPerDay) + 1;
+  const daysRemaining = Math.max(0, totalDaysInYear - daysElapsed);
+
+  // Get all active categories with their expenses for the year
+  const categories = await prisma.budgetCategory.findMany({
+    where: {
+      isActive: true,
+      parentId: null,
+    },
+    include: {
+      children: {
+        where: { isActive: true },
+        include: {
+          expenses: {
+            where: {
+              date: { gte: startDate, lte: endDate },
+            },
+          },
+        },
+      },
+      expenses: {
+        where: {
+          date: { gte: startDate, lte: endDate },
+        },
+      },
+    },
+    orderBy: { name: 'asc' },
+  });
+
+  function getStatus(percentUsed: number): 'on_track' | 'warning' | 'over_budget' {
+    // Adjust threshold based on how far through the year we are
+    const expectedPercent = (daysElapsed / totalDaysInYear) * 100;
+    const adjustedPercent = percentUsed / (expectedPercent / 100);
+
+    if (adjustedPercent > 100) return 'over_budget';
+    if (adjustedPercent > 80) return 'warning';
+    return 'on_track';
+  }
+
+  const budgetCategories: BudgetVsActualCategory[] = [];
+  let totalAnnualizedBudget = 0;
+  let totalYtdActual = 0;
+
+  for (const cat of categories) {
+    const periodBudget = decimalToNumber(cat.budgetAmount);
+    const annualizedBudget = annualizeBudget(periodBudget, cat.period);
+    const directActual = cat.expenses.reduce(
+      (sum, exp) => sum + decimalToNumber(exp.amount),
+      0
+    );
+
+    // Process children
+    const childCategories: BudgetVsActualCategory[] = cat.children.map((child) => {
+      const childPeriodBudget = decimalToNumber(child.budgetAmount);
+      const childAnnualized = annualizeBudget(childPeriodBudget, child.period);
+      const childActual = child.expenses.reduce(
+        (sum, exp) => sum + decimalToNumber(exp.amount),
+        0
+      );
+      const childPercent = childAnnualized > 0 ? (childActual / childAnnualized) * 100 : 0;
+
+      return {
+        categoryId: child.id,
+        categoryName: child.name,
+        parentName: cat.name,
+        period: child.period,
+        periodBudget: childPeriodBudget,
+        annualizedBudget: childAnnualized,
+        ytdActual: childActual,
+        variance: childAnnualized - childActual,
+        percentUsed: childPercent,
+        status: getStatus(childPercent),
+      };
+    });
+
+    const childAnnualizedTotal = childCategories.reduce((sum, c) => sum + c.annualizedBudget, 0);
+    const childActualTotal = childCategories.reduce((sum, c) => sum + c.ytdActual, 0);
+    const totalAnnualized = annualizedBudget + childAnnualizedTotal;
+    const totalActual = directActual + childActualTotal;
+    const totalPercent = totalAnnualized > 0 ? (totalActual / totalAnnualized) * 100 : 0;
+
+    budgetCategories.push({
+      categoryId: cat.id,
+      categoryName: cat.name,
+      parentName: null,
+      period: cat.period,
+      periodBudget,
+      annualizedBudget: totalAnnualized,
+      ytdActual: totalActual,
+      variance: totalAnnualized - totalActual,
+      percentUsed: totalPercent,
+      status: getStatus(totalPercent),
+      children: childCategories.length > 0 ? childCategories : undefined,
+    });
+
+    totalAnnualizedBudget += totalAnnualized;
+    totalYtdActual += totalActual;
+  }
+
+  // Calculate projected year-end spending
+  const dailySpendingRate = daysElapsed > 0 ? totalYtdActual / daysElapsed : 0;
+  const projectedYearEnd = dailySpendingRate * totalDaysInYear;
+  const projectedVariance = totalAnnualizedBudget - projectedYearEnd;
+
+  return {
+    year,
+    asOfDate: endDate,
+    daysElapsed,
+    daysRemaining,
+    categories: budgetCategories,
+    totals: {
+      annualizedBudget: totalAnnualizedBudget,
+      ytdActual: totalYtdActual,
+      variance: totalAnnualizedBudget - totalYtdActual,
+      percentUsed: totalAnnualizedBudget > 0 ? (totalYtdActual / totalAnnualizedBudget) * 100 : 0,
+      projectedYearEnd,
+      projectedVariance,
     },
   };
 }

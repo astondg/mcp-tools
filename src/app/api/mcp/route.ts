@@ -38,7 +38,12 @@ import {
   getIncomeSources,
   addIncome,
   getIncome,
+  getAnnualBudgetSummary,
+  getExpenseTotals,
+  getIncomeTotals,
+  getBudgetVsActuals,
 } from '@/lib/budget/queries';
+import type { ExpenseGroupBy, IncomeGroupBy } from '@/lib/budget/types';
 import { BUDGET_PERIODS } from '@/lib/budget/types';
 
 // Type definitions
@@ -2389,6 +2394,230 @@ const handler = createMcpHandler(
           };
         } catch (error) {
           console.error('Error in income_get:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // ==========================================
+    // Aggregated Analysis Tools
+    // ==========================================
+
+    // Annual budget summary
+    server.tool(
+      'budget_get_annual_summary',
+      'Get annualized budget totals with YTD spending for all categories. Auto-converts weekly/fortnightly/monthly/quarterly budgets to annual figures.',
+      {
+        year: z.number().int().min(2020).max(2100).optional().describe('Year to analyze (default: current year)'),
+      },
+      async (params) => {
+        try {
+          const summary = await getAnnualBudgetSummary({ year: params.year });
+
+          let response = `📊 Annual Budget Summary (${summary.year})\n`;
+          response += `Period: ${summary.startDate.toISOString().split('T')[0]} to ${summary.endDate.toISOString().split('T')[0]}\n\n`;
+
+          const formatVariance = (variance: number) => {
+            if (variance >= 0) return `✅ $${variance.toFixed(2)} under`;
+            return `🔴 $${Math.abs(variance).toFixed(2)} over`;
+          };
+
+          for (const cat of summary.categories) {
+            response += `**${cat.categoryName}** (${cat.period} → Annual)\n`;
+            response += `  Budget: $${cat.periodBudget.toFixed(2)}/${cat.period.toLowerCase()} = $${cat.annualizedBudget.toFixed(2)}/year\n`;
+            response += `  YTD Actual: $${cat.ytdActual.toFixed(2)}\n`;
+            response += `  ${formatVariance(cat.variance)} (${cat.percentUsed.toFixed(0)}% used)\n`;
+
+            if (cat.children && cat.children.length > 0) {
+              for (const child of cat.children) {
+                response += `    • ${child.categoryName}: $${child.ytdActual.toFixed(2)} / $${child.annualizedBudget.toFixed(2)} (${child.percentUsed.toFixed(0)}%)\n`;
+              }
+            }
+            response += '\n';
+          }
+
+          response += `---\n`;
+          response += `**TOTALS**\n`;
+          response += `  Annual Budget: $${summary.totals.annualizedBudget.toFixed(2)}\n`;
+          response += `  YTD Spending: $${summary.totals.ytdActual.toFixed(2)}\n`;
+          response += `  ${formatVariance(summary.totals.variance)} (${summary.totals.percentUsed.toFixed(0)}% used)`;
+
+          return {
+            content: [{ type: 'text', text: response }]
+          };
+        } catch (error) {
+          console.error('Error in budget_get_annual_summary:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Expense totals by group
+    server.tool(
+      'expense_get_totals',
+      'Get aggregated expense totals grouped by category, month, or week. Returns totals instead of individual transactions.',
+      {
+        startDate: z.string().describe('Start date (YYYY-MM-DD)'),
+        endDate: z.string().describe('End date (YYYY-MM-DD)'),
+        groupBy: z.enum(['category', 'month', 'week']).describe('How to group the results'),
+      },
+      async (params) => {
+        try {
+          const start = new Date(params.startDate);
+          const end = new Date(params.endDate);
+          end.setHours(23, 59, 59, 999);
+
+          if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+            return {
+              content: [{ type: 'text', text: '❌ Invalid date format. Use YYYY-MM-DD.' }]
+            };
+          }
+
+          const totals = await getExpenseTotals({
+            startDate: start,
+            endDate: end,
+            groupBy: params.groupBy as ExpenseGroupBy,
+          });
+
+          let response = `📊 Expense Totals by ${params.groupBy}\n`;
+          response += `Period: ${totals.startDate.toISOString().split('T')[0]} to ${totals.endDate.toISOString().split('T')[0]}\n\n`;
+
+          if (totals.items.length === 0) {
+            response += 'No expenses found for this period.\n';
+          } else {
+            for (const item of totals.items) {
+              response += `**${item.groupLabel}**\n`;
+              response += `  Total: $${item.total.toFixed(2)} (${item.count} transactions)\n`;
+            }
+          }
+
+          response += `\n---\n`;
+          response += `**Grand Total**: $${totals.grandTotal.toFixed(2)} (${totals.transactionCount} transactions)`;
+
+          return {
+            content: [{ type: 'text', text: response }]
+          };
+        } catch (error) {
+          console.error('Error in expense_get_totals:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Income totals by group
+    server.tool(
+      'income_get_totals',
+      'Get aggregated income totals grouped by source or month. Returns totals instead of individual transactions.',
+      {
+        startDate: z.string().describe('Start date (YYYY-MM-DD)'),
+        endDate: z.string().describe('End date (YYYY-MM-DD)'),
+        groupBy: z.enum(['source', 'month']).describe('How to group the results'),
+      },
+      async (params) => {
+        try {
+          const start = new Date(params.startDate);
+          const end = new Date(params.endDate);
+          end.setHours(23, 59, 59, 999);
+
+          if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+            return {
+              content: [{ type: 'text', text: '❌ Invalid date format. Use YYYY-MM-DD.' }]
+            };
+          }
+
+          const totals = await getIncomeTotals({
+            startDate: start,
+            endDate: end,
+            groupBy: params.groupBy as IncomeGroupBy,
+          });
+
+          let response = `💵 Income Totals by ${params.groupBy}\n`;
+          response += `Period: ${totals.startDate.toISOString().split('T')[0]} to ${totals.endDate.toISOString().split('T')[0]}\n\n`;
+
+          if (totals.items.length === 0) {
+            response += 'No income found for this period.\n';
+          } else {
+            for (const item of totals.items) {
+              response += `**${item.groupLabel}**\n`;
+              response += `  Total: $${item.total.toFixed(2)} (${item.count} payments)\n`;
+            }
+          }
+
+          response += `\n---\n`;
+          response += `**Grand Total**: $${totals.grandTotal.toFixed(2)} (${totals.transactionCount} payments)`;
+
+          return {
+            content: [{ type: 'text', text: response }]
+          };
+        } catch (error) {
+          console.error('Error in income_get_totals:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Budget vs Actuals comparison
+    server.tool(
+      'budget_vs_actuals',
+      'Get a complete budget vs actual spending comparison for every category. Shows annualized budgets, YTD spending, variance, status (on_track/warning/over_budget), and projected year-end figures.',
+      {
+        year: z.number().int().min(2020).max(2100).optional().describe('Year to analyze (default: current year)'),
+      },
+      async (params) => {
+        try {
+          const comparison = await getBudgetVsActuals({ year: params.year });
+
+          const statusIcon = (status: string) => {
+            switch (status) {
+              case 'on_track': return '✅';
+              case 'warning': return '⚠️';
+              case 'over_budget': return '🔴';
+              default: return '❓';
+            }
+          };
+
+          let response = `📊 Budget vs Actuals (${comparison.year})\n`;
+          response += `As of: ${comparison.asOfDate.toISOString().split('T')[0]}\n`;
+          response += `Progress: ${comparison.daysElapsed} days elapsed, ${comparison.daysRemaining} days remaining\n\n`;
+
+          response += `| Category | Annual Budget | YTD Actual | Variance | % Used | Status |\n`;
+          response += `|----------|---------------|------------|----------|--------|--------|\n`;
+
+          for (const cat of comparison.categories) {
+            const variance = cat.variance >= 0 ? `+$${cat.variance.toFixed(0)}` : `-$${Math.abs(cat.variance).toFixed(0)}`;
+            response += `| **${cat.categoryName}** | $${cat.annualizedBudget.toFixed(0)} | $${cat.ytdActual.toFixed(0)} | ${variance} | ${cat.percentUsed.toFixed(0)}% | ${statusIcon(cat.status)} |\n`;
+
+            if (cat.children && cat.children.length > 0) {
+              for (const child of cat.children) {
+                const childVariance = child.variance >= 0 ? `+$${child.variance.toFixed(0)}` : `-$${Math.abs(child.variance).toFixed(0)}`;
+                response += `|   ↳ ${child.categoryName} | $${child.annualizedBudget.toFixed(0)} | $${child.ytdActual.toFixed(0)} | ${childVariance} | ${child.percentUsed.toFixed(0)}% | ${statusIcon(child.status)} |\n`;
+              }
+            }
+          }
+
+          response += `\n---\n`;
+          response += `**SUMMARY**\n`;
+          response += `• Annual Budget: $${comparison.totals.annualizedBudget.toFixed(2)}\n`;
+          response += `• YTD Spending: $${comparison.totals.ytdActual.toFixed(2)} (${comparison.totals.percentUsed.toFixed(1)}%)\n`;
+          response += `• Current Variance: ${comparison.totals.variance >= 0 ? '+' : '-'}$${Math.abs(comparison.totals.variance).toFixed(2)}\n`;
+          response += `\n**PROJECTIONS**\n`;
+          response += `• Projected Year-End Spending: $${comparison.totals.projectedYearEnd.toFixed(2)}\n`;
+          response += `• Projected Variance: ${comparison.totals.projectedVariance >= 0 ? '+' : '-'}$${Math.abs(comparison.totals.projectedVariance).toFixed(2)}\n`;
+          response += comparison.totals.projectedVariance >= 0 ? '✅ On track to stay under budget' : '🔴 Projected to exceed budget';
+
+          return {
+            content: [{ type: 'text', text: response }]
+          };
+        } catch (error) {
+          console.error('Error in budget_vs_actuals:', error);
           return {
             content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
           };
