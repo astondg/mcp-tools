@@ -1958,12 +1958,17 @@ const handler = createMcpHandler(
     // Import expenses from CSV
     server.tool(
       'expense_import',
-      'Bulk import expenses from CSV data. Returns uncategorized items for client to categorize.',
+      'Bulk import expenses from CSV data. Categories can be provided via CSV column, categories array, or server rules will be used as fallback.',
       {
         csvData: z.string().min(1).describe('Raw CSV data as a string'),
         dateColumn: z.string().describe('Name of the date column'),
         amountColumn: z.string().describe('Name of the amount column'),
         descriptionColumn: z.string().describe('Name of the description column'),
+        categoryColumn: z.string().optional().describe('Name of the category column in CSV (if present)'),
+        categories: z.array(z.object({
+          description: z.string().describe('Expense description to match'),
+          category: z.string().describe('Category name to assign'),
+        })).optional().describe('Client-provided categories mapping descriptions to category names'),
         skipHeader: z.boolean().optional().describe('Skip the first row (default: true)'),
       },
       async (params) => {

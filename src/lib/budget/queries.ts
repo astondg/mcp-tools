@@ -419,6 +419,8 @@ export async function importExpenses(data: {
   dateColumn: string;
   amountColumn: string;
   descriptionColumn: string;
+  categoryColumn?: string;
+  categories?: Array<{ description: string; category: string }>;
   skipHeader?: boolean;
 }): Promise<ImportResult> {
   const result: ImportResult = {
@@ -439,6 +441,7 @@ export async function importExpenses(data: {
   const dateIdx = header.indexOf(data.dateColumn);
   const amountIdx = header.indexOf(data.amountColumn);
   const descIdx = header.indexOf(data.descriptionColumn);
+  const categoryIdx = data.categoryColumn ? header.indexOf(data.categoryColumn) : -1;
 
   if (dateIdx === -1) {
     result.errors.push(`Date column "${data.dateColumn}" not found in header`);
@@ -452,6 +455,18 @@ export async function importExpenses(data: {
     result.errors.push(`Description column "${data.descriptionColumn}" not found in header`);
     return result;
   }
+  if (data.categoryColumn && categoryIdx === -1) {
+    result.errors.push(`Category column "${data.categoryColumn}" not found in header`);
+    return result;
+  }
+
+  // Build a map of client-provided categories (description -> category name)
+  const clientCategories = new Map<string, string>();
+  if (data.categories) {
+    for (const item of data.categories) {
+      clientCategories.set(item.description.toLowerCase(), item.category);
+    }
+  }
 
   // Parse all rows first to collect bank references
   const startRow = data.skipHeader !== false ? 1 : 0;
@@ -462,6 +477,7 @@ export async function importExpenses(data: {
     description: string;
     bankReference: string;
     dateStr: string;
+    csvCategory?: string;
   }> = [];
 
   for (let i = startRow; i < lines.length; i++) {
@@ -508,6 +524,7 @@ export async function importExpenses(data: {
 
     const expenseAmount = Math.abs(amount);
     const bankReference = `${dateStr}_${amountStr}_${description.substring(0, 50)}`;
+    const csvCategory = categoryIdx >= 0 ? values[categoryIdx]?.trim() : undefined;
 
     parsedRows.push({
       rowNum: i + 1,
@@ -516,12 +533,33 @@ export async function importExpenses(data: {
       description,
       bankReference,
       dateStr,
+      csvCategory,
     });
   }
 
   if (parsedRows.length === 0) {
     return result;
   }
+
+  // Pre-fetch all categorization rules for server-side fallback
+  const rules = await prisma.categorizationRule.findMany({
+    where: { isActive: true },
+    include: { category: true },
+    orderBy: { priority: 'desc' },
+  });
+  const rulesForMatching = rules.map((r) => ({
+    id: r.id,
+    pattern: r.pattern,
+    matchType: r.matchType,
+    categoryId: r.categoryId,
+    categoryName: r.category.name,
+  }));
+
+  // Pre-fetch all categories for name lookup
+  const allCategories = await prisma.budgetCategory.findMany({
+    select: { id: true, name: true },
+  });
+  const categoryByName = new Map(allCategories.map((c) => [c.name.toLowerCase(), c]));
 
   // Batch check for existing bank references
   const bankReferences = parsedRows.map((r) => r.bankReference);
@@ -531,18 +569,77 @@ export async function importExpenses(data: {
   });
   const existingRefs = new Set(existingExpenses.map((e) => e.bankReference));
 
-  // All non-duplicate items go to uncategorized for client to categorize
+  // Prepare expenses to insert
+  const expensesToCreate: Array<{
+    date: Date;
+    amount: number;
+    categoryId: string;
+    description: string;
+    source: ExpenseSource;
+    bankReference: string;
+  }> = [];
+
   for (const row of parsedRows) {
+    // Skip duplicates
     if (existingRefs.has(row.bankReference)) {
       result.skipped++;
       continue;
     }
 
-    result.uncategorized.push({
-      description: row.description,
-      amount: row.amount,
-      date: row.dateStr,
+    let categoryId: string | null = null;
+
+    // 1. Try CSV category column first
+    if (row.csvCategory) {
+      const cat = categoryByName.get(row.csvCategory.toLowerCase());
+      if (cat) {
+        categoryId = cat.id;
+      }
+    }
+
+    // 2. Try client-provided categories
+    if (!categoryId) {
+      const clientCat = clientCategories.get(row.description.toLowerCase());
+      if (clientCat) {
+        const cat = categoryByName.get(clientCat.toLowerCase());
+        if (cat) {
+          categoryId = cat.id;
+        }
+      }
+    }
+
+    // 3. Fall back to server-side rule matching
+    if (!categoryId) {
+      const match = matchCategory(row.description, rulesForMatching);
+      if (match) {
+        categoryId = match.categoryId;
+      }
+    }
+
+    // If categorized, add to create list; otherwise add to uncategorized
+    if (categoryId) {
+      expensesToCreate.push({
+        date: row.date,
+        amount: row.amount,
+        categoryId,
+        description: row.description,
+        source: 'BANK_IMPORT',
+        bankReference: row.bankReference,
+      });
+    } else {
+      result.uncategorized.push({
+        description: row.description,
+        amount: row.amount,
+        date: row.dateStr,
+      });
+    }
+  }
+
+  // Bulk insert all categorized expenses
+  if (expensesToCreate.length > 0) {
+    await prisma.expense.createMany({
+      data: expensesToCreate,
     });
+    result.imported = expensesToCreate.length;
   }
 
   return result;
