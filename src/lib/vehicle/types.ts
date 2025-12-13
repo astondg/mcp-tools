@@ -53,6 +53,7 @@ export interface ServiceRecordResponse {
   serviceType: string;
   odometer: number | null;
   cost: number | null;
+  serviceTotalValue: number | null;
   provider: string | null;
   notes: string | null;
   createdAt: Date;

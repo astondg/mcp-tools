@@ -41,8 +41,9 @@ model ServiceRecord {
   serviceDate DateTime @map("service_date") @db.Date
   serviceType String   @map("service_type") // e.g., 'oil_change', 'tire_rotation'
   odometer    Int?     // Odometer reading at time of service (km)
-  cost        Decimal? @db.Decimal(10, 2) // Total cost
-  provider    String?  // Service provider name
+  cost              Decimal? @db.Decimal(10, 2) // Amount actually paid
+  serviceTotalValue Decimal? @map("service_total_value") @db.Decimal(10, 2) // Total value of service (before service plan coverage)
+  provider          String?  // Service provider name
   notes       String?
   createdAt   DateTime @default(now()) @map("created_at")
 

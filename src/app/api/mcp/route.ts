@@ -1298,7 +1298,8 @@ const handler = createMcpHandler(
         serviceDate: z.string().describe('Service date (YYYY-MM-DD)'),
         serviceType: z.string().describe(`Service type (e.g., ${SERVICE_TYPES.slice(0, 5).join(', ')})`),
         odometer: z.number().int().min(0).optional().describe('Odometer reading at service (km)'),
-        cost: z.number().min(0).optional().describe('Total cost of service'),
+        cost: z.number().min(0).optional().describe('Amount actually paid for service'),
+        serviceTotalValue: z.number().min(0).optional().describe('Total value of service before any discounts or service plan coverage'),
         provider: z.string().max(100).optional().describe('Service provider name'),
         notes: z.string().optional().describe('Service notes'),
         parts: z.array(z.object({
@@ -1326,6 +1327,7 @@ const handler = createMcpHandler(
             serviceType: params.serviceType,
             odometer: params.odometer,
             cost: params.cost,
+            serviceTotalValue: params.serviceTotalValue,
             provider: params.provider,
             notes: params.notes,
             parts: params.parts,
@@ -1337,7 +1339,10 @@ const handler = createMcpHandler(
             `• Date: ${record.serviceDate.toISOString().split('T')[0]}\n` +
             `• Type: ${record.serviceType}\n` +
             (record.odometer ? `• Odometer: ${record.odometer.toLocaleString()} km\n` : '') +
-            (record.cost ? `• Cost: $${record.cost.toFixed(2)}\n` : '') +
+            (record.cost !== null ? `• Cost paid: $${record.cost.toFixed(2)}\n` : '') +
+            (record.serviceTotalValue !== null ? `• Service value: $${record.serviceTotalValue.toFixed(2)}\n` : '') +
+            (record.serviceTotalValue !== null && record.cost !== null && record.serviceTotalValue > record.cost
+              ? `• Savings: $${(record.serviceTotalValue - record.cost).toFixed(2)}\n` : '') +
             (record.provider ? `• Provider: ${record.provider}\n` : '');
 
           if (record.parts && record.parts.length > 0) {
@@ -1393,7 +1398,10 @@ const handler = createMcpHandler(
             let entry = `• **${r.serviceType}** on ${r.serviceDate.toISOString().split('T')[0]}\n` +
               `  Vehicle: ${r.vehicleName}\n` +
               (r.odometer ? `  Odometer: ${r.odometer.toLocaleString()} km\n` : '') +
-              (r.cost ? `  Cost: $${r.cost.toFixed(2)}\n` : '') +
+              (r.cost !== null ? `  Cost paid: $${r.cost.toFixed(2)}\n` : '') +
+              (r.serviceTotalValue !== null ? `  Service value: $${r.serviceTotalValue.toFixed(2)}\n` : '') +
+              (r.serviceTotalValue !== null && r.cost !== null && r.serviceTotalValue > r.cost
+                ? `  Savings: $${(r.serviceTotalValue - r.cost).toFixed(2)}\n` : '') +
               (r.provider ? `  Provider: ${r.provider}\n` : '');
 
             if (r.parts && r.parts.length > 0) {
@@ -1424,7 +1432,8 @@ const handler = createMcpHandler(
         serviceDate: z.string().optional().describe('New service date (YYYY-MM-DD)'),
         serviceType: z.string().optional().describe('New service type'),
         odometer: z.number().int().min(0).optional().describe('New odometer reading'),
-        cost: z.number().min(0).optional().describe('New cost'),
+        cost: z.number().min(0).optional().describe('New amount paid'),
+        serviceTotalValue: z.number().min(0).optional().describe('New service total value'),
         provider: z.string().optional().describe('New provider'),
         notes: z.string().optional().describe('New notes'),
       },
@@ -1442,6 +1451,7 @@ const handler = createMcpHandler(
           if (params.serviceType) updateData.serviceType = params.serviceType;
           if (params.odometer !== undefined) updateData.odometer = params.odometer;
           if (params.cost !== undefined) updateData.cost = params.cost;
+          if (params.serviceTotalValue !== undefined) updateData.serviceTotalValue = params.serviceTotalValue;
           if (params.provider !== undefined) updateData.provider = params.provider;
           if (params.notes !== undefined) updateData.notes = params.notes;
 

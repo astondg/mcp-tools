@@ -90,6 +90,7 @@ export async function createServiceRecord(data: {
   serviceType: string;
   odometer?: number;
   cost?: number;
+  serviceTotalValue?: number;
   provider?: string;
   notes?: string;
   parts?: Array<{
@@ -112,6 +113,7 @@ export async function createServiceRecord(data: {
         serviceType: data.serviceType,
         odometer: data.odometer,
         cost: data.cost,
+        serviceTotalValue: data.serviceTotalValue,
         provider: data.provider,
         notes: data.notes,
       },
@@ -209,6 +211,7 @@ export async function getServiceRecordById(id: string): Promise<ServiceRecordRes
     serviceType: record.serviceType,
     odometer: record.odometer,
     cost: decimalToNumber(record.cost),
+    serviceTotalValue: decimalToNumber(record.serviceTotalValue),
     provider: record.provider,
     notes: record.notes,
     createdAt: record.createdAt,
@@ -276,6 +279,7 @@ export async function getServiceHistory(filters: {
       serviceType: record.serviceType,
       odometer: record.odometer,
       cost: decimalToNumber(record.cost),
+      serviceTotalValue: decimalToNumber(record.serviceTotalValue),
       provider: record.provider,
       notes: record.notes,
       createdAt: record.createdAt,
@@ -300,6 +304,7 @@ export async function updateServiceRecord(
     serviceType?: string;
     odometer?: number;
     cost?: number;
+    serviceTotalValue?: number;
     provider?: string;
     notes?: string;
   }

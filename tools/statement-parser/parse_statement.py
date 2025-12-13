@@ -13,9 +13,9 @@ Output: Creates <statement>.json with categorized transactions.
 
 Features:
 - Auto-detects statement format (Amex, CommBank, Pocketbook)
-- Uses local pattern matching for known merchants
-- Falls back to Apple Foundation Models for unknown merchants
-- Searches the web for context on truly unknown merchants
+- Fetches valid categories from server
+- Uses Apple Foundation Models for ALL categorization
+- Searches the web for context on unknown merchants
 - Excludes transfers/income from expense output
 """
 
@@ -58,146 +58,23 @@ FORMATS = {
     },
 }
 
-# Categories the LLM can choose from
-VALID_CATEGORIES = [
-    "Groceries", "Coffee", "Dining Out", "Food Delivery",
-    "Alcohol", "Treats", "Shopping", "Transport", "Fuel",
-    "Utilities", "Subscriptions", "Health & Beauty", "Health",
-    "Kids", "Insurance", "Entertainment", "Travel", "Education",
-    "Gifts", "Home", "Pets", "Fitness", "Transfer", "Income", "Uncategorized"
-]
 
+def fetch_categories_from_server(server_url: str) -> List[str]:
+    """Fetch valid categories from the server's REST API."""
+    try:
+        req = urllib.request.Request(
+            server_url,
+            headers={'Accept': 'application/json'},
+            method='GET'
+        )
 
-# Map external category names to our categories
-CATEGORY_MAPPING = {
-    # Food & Drink
-    ("Food & Drink", "Coffee & Tea"): "Coffee",
-    ("Food & Drink", "Groceries"): "Groceries",
-    ("Food & Drink", "Restaurants"): "Dining Out",
-    ("Food & Drink", "Fast Food"): "Dining Out",
-    ("Food & Drink", "Bars & Pubs"): "Alcohol",
-    ("Food & Drink", "Alcohol"): "Alcohol",
-    ("Food & Drink", "Snacks"): "Treats",
-    ("Food & Drink", "Tobacco"): "Treats",
-    ("Food & Drink", "Other Food Expenses"): "Dining Out",
-    ("Food & Drink", ""): "Dining Out",
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            return data.get('categories', [])
 
-    # Transportation
-    ("Transportation", "Public Transit"): "Transport",
-    ("Transportation", "Fuel"): "Fuel",
-    ("Transportation", "Parking"): "Transport",
-    ("Transportation", "Parking & Tolls"): "Transport",
-    ("Transportation", "Taxi & Rideshare"): "Transport",
-    ("Transportation", "Auto Supplies"): "Transport",
-    ("Transportation", ""): "Transport",
-
-    # Shopping
-    ("Shopping", "Clothing"): "Shopping",
-    ("Shopping", "Electronics"): "Shopping",
-    ("Shopping", "General"): "Shopping",
-    ("Shopping", ""): "Shopping",
-
-    # Bills & Utilities
-    ("Bills & Utilities", "Phone"): "Utilities",
-    ("Bills & Utilities", "Internet"): "Utilities",
-    ("Bills & Utilities", "Electricity"): "Utilities",
-    ("Bills & Utilities", "Gas"): "Utilities",
-    ("Bills & Utilities", ""): "Utilities",
-
-    # Entertainment & Leisure
-    ("Entertainment", "Streaming"): "Subscriptions",
-    ("Entertainment", "Movies"): "Entertainment",
-    ("Entertainment", ""): "Entertainment",
-    ("Leisure", "Games"): "Entertainment",
-    ("Leisure", "Books & News"): "Entertainment",
-    ("Leisure", "Art"): "Entertainment",
-    ("Leisure", ""): "Entertainment",
-
-    # Health & Fitness
-    ("Health & Fitness", "Pharmacy"): "Health",
-    ("Health & Fitness", "Gym"): "Fitness",
-    ("Health & Fitness", ""): "Health",
-    ("Sports & Fitness", "Memberships"): "Fitness",
-    ("Sports & Fitness", ""): "Fitness",
-    ("Health & Medical", "Doctor"): "Health",
-    ("Health & Medical", ""): "Health",
-
-    # Personal
-    ("Personal Care", ""): "Health & Beauty",
-    ("Personal", "Beauty"): "Health & Beauty",
-    ("Personal", "Clothing"): "Shopping",
-    ("Personal", "Other Personal Expenses"): "Shopping",
-    ("Personal", ""): "Shopping",
-
-    # Financial
-    ("Financial", "Transfers"): "Transfer",
-    ("Financial", "Direct Debits"): "Utilities",
-    ("Financial", ""): "Transfer",
-
-    # Other
-    ("Education", "Tuition & Fees"): "Education",
-    ("Education", ""): "Education",
-    ("Travel", "Accommodation"): "Travel",
-    ("Travel", ""): "Travel",
-    ("Gifts & Donations", ""): "Gifts",
-    ("Home", "Furnishings"): "Home",
-    ("Home", "Other Home Expenses"): "Home",
-    ("Home", ""): "Home",
-    ("Insurance", "Financial Insurance"): "Insurance",
-    ("Insurance", ""): "Insurance",
-    ("Tax", "Personal Taxes"): "Utilities",
-    ("Tax", ""): "Utilities",
-    ("Services", "Government"): "Utilities",
-    ("Services", ""): "Shopping",
-    ("Business", "Services"): "Shopping",
-    ("Business", ""): "Shopping",
-    ("Kids", ""): "Kids",
-    ("Pets", ""): "Pets",
-    ("Income", ""): "Income",
-    ("Transfer", ""): "Transfer",
-}
-
-
-def map_external_category(category: str, subcategory: str) -> str:
-    """Map external category/subcategory to our categories."""
-    # Try exact match with subcategory
-    key = (category, subcategory)
-    if key in CATEGORY_MAPPING:
-        return CATEGORY_MAPPING[key]
-
-    # Try category with empty subcategory
-    key = (category, "")
-    if key in CATEGORY_MAPPING:
-        return CATEGORY_MAPPING[key]
-
-    # Try to match just the category name to our valid categories
-    for valid_cat in VALID_CATEGORIES:
-        if valid_cat.lower() in category.lower() or category.lower() in valid_cat.lower():
-            return valid_cat
-
-    return "Uncategorized"
-
-
-def load_categories(config_path: Path) -> Dict:
-    """Load categorization rules from JSON config."""
-    if not config_path.exists():
-        print(f"Warning: Categories file not found at {config_path}", file=sys.stderr)
-        return {"rules": [], "default_category": "Uncategorized"}
-
-    with open(config_path, "r") as f:
-        return json.load(f)
-
-
-def categorize(description: str, rules: List[Dict], default: str) -> str:
-    """Match description against rules and return category."""
-    desc_upper = description.upper()
-
-    for rule in rules:
-        pattern = rule["pattern"].upper()
-        if pattern in desc_upper:
-            return rule["category"]
-
-    return default
+    except Exception as e:
+        print(f"Warning: Could not fetch categories from server: {e}", file=sys.stderr)
+        return []
 
 
 def search_merchant_info(merchant: str) -> Optional[str]:
@@ -436,33 +313,24 @@ def parse_date(date_str: str, fmt: str) -> str:
         return date_str
 
 
-def parse_csv(file_path: Path, format_name: Optional[str], categories_config: Dict,
-              use_llm: bool = False, valid_categories: Optional[List[str]] = None,
-              exclude_transfers: bool = False, use_web_search: bool = False) -> Dict:
-    """Parse CSV bank statement and return anonymized, categorized data."""
-    transactions = []  # Store all transactions with original descriptions temporarily
-    uncategorized_descriptions = set()
-    category_counts = {}
+def parse_csv(file_path: Path, categories: List[str], use_web_search: bool = True) -> Dict:
+    """Parse CSV bank statement and return anonymized, categorized data.
 
-    rules = categories_config.get("rules", [])
-    default_category = categories_config.get("default_category", "Uncategorized")
+    All categorization is done via LLM using the provided categories list.
+    """
+    transactions = []
+    category_counts = {}
 
     with open(file_path, "r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         headers = reader.fieldnames or []
 
-        if format_name:
-            if format_name not in FORMATS:
-                print(f"Error: Unknown format '{format_name}'.", file=sys.stderr)
-                sys.exit(1)
-            fmt = FORMATS[format_name]
-        else:
-            detected = detect_format(headers)
-            if not detected:
-                print(f"Error: Could not detect format. Headers: {headers}", file=sys.stderr)
-                sys.exit(1)
-            fmt = FORMATS[detected]
-            print(f"Detected format: {detected}")
+        detected = detect_format(headers)
+        if not detected:
+            print(f"Error: Could not detect format. Headers: {headers}", file=sys.stderr)
+            sys.exit(1)
+        fmt = FORMATS[detected]
+        print(f"Detected format: {detected}")
 
         date_col = fmt["date_col"]
         desc_col = fmt["description_col"]
@@ -470,8 +338,6 @@ def parse_csv(file_path: Path, format_name: Optional[str], categories_config: Di
 
         # Check if this format has separate debit/credit columns
         has_debit_credit = "debit_col" in fmt
-        # Check if this format has pre-existing categories
-        has_category_col = "category_col" in fmt
 
         for row in reader:
             try:
@@ -497,49 +363,27 @@ def parse_csv(file_path: Path, format_name: Optional[str], categories_config: Di
                 date = parse_date(row.get(date_col, ""), date_fmt)
                 description = row.get(desc_col, "").strip()
 
-                # Get category - use existing if available, otherwise use rules
-                if has_category_col:
-                    existing_cat = row.get(fmt["category_col"], "").strip()
-                    subcategory = row.get(fmt.get("subcategory_col", ""), "").strip()
-
-                    # Map common category names to our categories
-                    category = map_external_category(existing_cat, subcategory)
-
-                    # If mapping failed, try our rules
-                    if category == default_category:
-                        category = categorize(description, rules, default_category)
-                else:
-                    category = categorize(description, rules, default_category)
-
-                # Track uncategorized for LLM
-                if category == default_category:
-                    uncategorized_descriptions.add(description)
-
                 transactions.append({
                     "date": date,
                     "amount": abs(amount),
-                    "category": category,
                     "is_expense": is_expense,
-                    "_description": description,  # Temporary, will be removed
+                    "_description": description,
                 })
 
             except (ValueError, KeyError) as e:
                 print(f"Warning: Skipping row: {e}", file=sys.stderr)
                 continue
 
-    # Use Apple Foundation Models for uncategorized if requested
-    llm_categories = {}
-    if use_llm and uncategorized_descriptions:
-        # Use provided categories or fall back to built-in list
-        cats_for_llm = valid_categories if valid_categories else VALID_CATEGORIES
-        llm_categories = categorize_with_afm(uncategorized_descriptions, cats_for_llm, use_web_search)
+    # Categorize ALL transactions with LLM
+    all_descriptions = set(tx["_description"] for tx in transactions)
+    print(f"Found {len(transactions)} transactions with {len(all_descriptions)} unique merchants")
 
-        # Apply LLM categories
-        for tx in transactions:
-            if tx["category"] == default_category:
-                desc = tx["_description"]
-                if desc in llm_categories:
-                    tx["category"] = llm_categories[desc]
+    llm_categories = categorize_with_afm(all_descriptions, categories, use_web_search)
+
+    # Apply categories to transactions
+    for tx in transactions:
+        desc = tx["_description"]
+        tx["category"] = llm_categories.get(desc, "Uncategorized")
 
     # Build final output - remove descriptions for privacy
     expenses = []
@@ -547,14 +391,10 @@ def parse_csv(file_path: Path, format_name: Optional[str], categories_config: Di
     excluded_count = 0
 
     for tx in transactions:
-        # Skip transfers if requested
-        if exclude_transfers and tx["category"] in ("Transfer", "Income"):
+        # Skip transfers/income
+        if tx["category"] in ("Transfer", "Income"):
             excluded_count += 1
             continue
-
-        # Track uncategorized hints (only first word, for privacy)
-        if tx["category"] == default_category:
-            merchant_hint = tx["_description"].split()[0] if tx["_description"] else "Unknown"
 
         # Count categories
         category_counts[tx["category"]] = category_counts.get(tx["category"], 0) + 1
@@ -577,7 +417,7 @@ def parse_csv(file_path: Path, format_name: Optional[str], categories_config: Di
     # Get remaining uncategorized hints
     uncategorized_hints = set()
     for tx in transactions:
-        if tx["category"] == default_category:
+        if tx["category"] == "Uncategorized":
             hint = tx["_description"].split()[0] if tx["_description"] else "Unknown"
             uncategorized_hints.add(hint)
 
@@ -612,6 +452,9 @@ def generate_csv_for_import(expenses: List[Dict], output_path: Path) -> None:
     print(f"CSV for import saved to: {csv_path}")
 
 
+SERVER_URL = "https://mcp-tools-one.vercel.app/api/budget/categories"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Parse bank statements with local categorization (privacy-first)",
@@ -624,7 +467,7 @@ Examples:
 Privacy: Merchant names are used for categorization locally but NEVER included
 in the output. Only categories and amounts are exported.
 
-Uses Apple Foundation Models via the 'afm' CLI tool for unknown merchants.
+Uses Apple Foundation Models via the 'afm' CLI tool for categorization.
 Install with: brew tap scouzi1966/afm && brew install afm
         """
     )
@@ -637,22 +480,17 @@ Install with: brew tap scouzi1966/afm && brew install afm
         print(f"Error: File not found: {args.file}", file=sys.stderr)
         sys.exit(1)
 
-    # Load categorization rules
-    categories_path = Path(__file__).parent / "categories.json"
-    categories_config = load_categories(categories_path)
-    print(f"Loaded {len(categories_config.get('rules', []))} categorization rules")
+    # Fetch categories from server
+    print(f"Fetching categories from server...")
+    categories = fetch_categories_from_server(SERVER_URL)
+    if not categories:
+        print("Error: Could not fetch categories from server", file=sys.stderr)
+        sys.exit(1)
+    print(f"Using {len(categories)} categories: {', '.join(categories)}")
 
     print(f"Processing: {args.file}")
 
-    result = parse_csv(
-        args.file,
-        None,  # Auto-detect format
-        categories_config,
-        use_llm=True,
-        valid_categories=None,
-        exclude_transfers=True,
-        use_web_search=True
-    )
+    result = parse_csv(args.file, categories)
 
     # Output to JSON file with same name as input
     output_path = args.file.with_suffix(".json")
