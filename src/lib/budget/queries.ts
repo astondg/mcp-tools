@@ -225,28 +225,18 @@ export async function addExpense(data: {
   bankReference?: string;
   source?: ExpenseSource;
 }): Promise<ExpenseResponse> {
-  let categoryId: string;
-  let categoryName: string;
-
-  if (data.categoryName) {
-    const category = await prisma.budgetCategory.findUnique({
-      where: { name: data.categoryName },
-    });
-    if (!category) {
-      throw new Error(`Category "${data.categoryName}" not found`);
-    }
-    categoryId = category.id;
-    categoryName = category.name;
-  } else {
-    // Try auto-categorization
-    const suggestion = await suggestCategory(data.description);
-    if (suggestion.matched && suggestion.categoryId) {
-      categoryId = suggestion.categoryId;
-      categoryName = suggestion.categoryName!;
-    } else {
-      throw new Error('No category provided and auto-categorization failed. Please specify a category.');
-    }
+  if (!data.categoryName) {
+    throw new Error('Category name is required');
   }
+
+  const category = await prisma.budgetCategory.findUnique({
+    where: { name: data.categoryName },
+  });
+  if (!category) {
+    throw new Error(`Category "${data.categoryName}" not found`);
+  }
+  const categoryId = category.id;
+  const categoryName = category.name;
 
   const expense = await prisma.expense.create({
     data: {
@@ -463,20 +453,6 @@ export async function importExpenses(data: {
     return result;
   }
 
-  // Pre-fetch all categorization rules once
-  const rules = await prisma.categorizationRule.findMany({
-    where: { isActive: true },
-    include: { category: true },
-    orderBy: { priority: 'desc' },
-  });
-  const rulesForMatching = rules.map((r) => ({
-    id: r.id,
-    pattern: r.pattern,
-    matchType: r.matchType,
-    categoryId: r.categoryId,
-    categoryName: r.category.name,
-  }));
-
   // Parse all rows first to collect bank references
   const startRow = data.skipHeader !== false ? 1 : 0;
   const parsedRows: Array<{
@@ -555,50 +531,18 @@ export async function importExpenses(data: {
   });
   const existingRefs = new Set(existingExpenses.map((e) => e.bankReference));
 
-  // Prepare expenses to insert
-  const expensesToCreate: Array<{
-    date: Date;
-    amount: number;
-    categoryId: string;
-    description: string;
-    source: ExpenseSource;
-    bankReference: string;
-  }> = [];
-
+  // All non-duplicate items go to uncategorized for client to categorize
   for (const row of parsedRows) {
-    // Skip duplicates
     if (existingRefs.has(row.bankReference)) {
       result.skipped++;
       continue;
     }
 
-    // Try to auto-categorize using in-memory rules
-    const match = matchCategory(row.description, rulesForMatching);
-
-    if (match) {
-      expensesToCreate.push({
-        date: row.date,
-        amount: row.amount,
-        categoryId: match.categoryId,
-        description: row.description,
-        source: 'BANK_IMPORT',
-        bankReference: row.bankReference,
-      });
-    } else {
-      result.uncategorized.push({
-        description: row.description,
-        amount: row.amount,
-        date: row.dateStr,
-      });
-    }
-  }
-
-  // Bulk insert all categorized expenses
-  if (expensesToCreate.length > 0) {
-    await prisma.expense.createMany({
-      data: expensesToCreate,
+    result.uncategorized.push({
+      description: row.description,
+      amount: row.amount,
+      date: row.dateStr,
     });
-    result.imported = expensesToCreate.length;
   }
 
   return result;

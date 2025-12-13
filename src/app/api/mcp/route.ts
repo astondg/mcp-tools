@@ -1912,7 +1912,7 @@ const handler = createMcpHandler(
       {
         date: z.string().describe('Expense date (YYYY-MM-DD)'),
         amount: z.number().min(0).describe('Expense amount'),
-        category: z.string().optional().describe('Category name (auto-categorizes if not provided)'),
+        category: z.string().describe('Category name'),
         description: z.string().min(1).describe('Description of the expense'),
         merchantName: z.string().optional().describe('Merchant/vendor name'),
         notes: z.string().optional().describe('Additional notes'),
@@ -1958,7 +1958,7 @@ const handler = createMcpHandler(
     // Import expenses from CSV
     server.tool(
       'expense_import',
-      'Bulk import expenses from CSV data with auto-categorization',
+      'Bulk import expenses from CSV data. Returns uncategorized items for client to categorize.',
       {
         csvData: z.string().min(1).describe('Raw CSV data as a string'),
         dateColumn: z.string().describe('Name of the date column'),
