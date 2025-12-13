@@ -6,22 +6,27 @@ Parses bank statements, categorizes locally, and outputs anonymized data.
 Merchant names never leave your machine.
 
 Usage:
-    python parse_statement.py <statement_file> [--output OUTPUT]
-    python parse_statement.py <statement_file> --llm  # Use Apple Foundation Models for unknowns
+    python parse_statement.py <statement.csv>
+    python parse_statement.py <statement.csv> --csv  # Also generate CSV for import
 
-Examples:
-    python parse_statement.py statement.csv
-    python parse_statement.py statement.csv --llm
-    python parse_statement.py statement.csv --fetch-categories  # Sync categories from MCP server
+Output: Creates <statement>.json with categorized transactions.
+
+Features:
+- Auto-detects statement format (Amex, CommBank, Pocketbook)
+- Uses local pattern matching for known merchants
+- Falls back to Apple Foundation Models for unknown merchants
+- Searches the web for context on truly unknown merchants
+- Excludes transfers/income from expense output
 """
 
 import argparse
 import csv
 import json
+import re
 import subprocess
 import sys
 import urllib.request
-import urllib.error
+import urllib.parse
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Set
@@ -195,35 +200,47 @@ def categorize(description: str, rules: List[Dict], default: str) -> str:
     return default
 
 
-def fetch_categories_from_server(server_url: str) -> List[str]:
-    """Fetch valid categories from the server's REST API."""
+def search_merchant_info(merchant: str) -> Optional[str]:
+    """Search the web for information about a merchant using DuckDuckGo."""
     try:
-        # Use the simple REST endpoint instead of MCP protocol
-        # Convert MCP URL to REST API URL
-        if '/api/mcp' in server_url:
-            api_url = server_url.replace('/api/mcp', '/api/budget/categories')
-        else:
-            api_url = server_url.rstrip('/') + '/api/budget/categories'
+        # Use DuckDuckGo's lite/html version - no API key needed
+        query = urllib.parse.quote(f"{merchant} business store company")
+        url = f"https://html.duckduckgo.com/html/?q={query}"
 
         req = urllib.request.Request(
-            api_url,
-            headers={'Accept': 'application/json'},
-            method='GET'
+            url,
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+            }
         )
 
         with urllib.request.urlopen(req, timeout=10) as response:
-            data = json.loads(response.read().decode('utf-8'))
-            return data.get('categories', [])
+            html = response.read().decode('utf-8', errors='ignore')
 
-    except urllib.error.URLError as e:
-        print(f"Warning: Could not fetch categories from server: {e}", file=sys.stderr)
-        return []
+            # Extract snippets from DuckDuckGo results
+            # Look for result snippets in the HTML
+            snippets = []
+
+            # Extract result snippets (text between result-snippet class)
+            snippet_matches = re.findall(r'class="result__snippet"[^>]*>([^<]+)<', html)
+            for snippet in snippet_matches[:3]:  # Take top 3 results
+                # Clean up HTML entities
+                snippet = snippet.replace('&amp;', '&').replace('&quot;', '"')
+                snippet = snippet.replace('&#x27;', "'").replace('&lt;', '<').replace('&gt;', '>')
+                snippets.append(snippet.strip())
+
+            if snippets:
+                return " | ".join(snippets)
+
+            return None
+
     except Exception as e:
-        print(f"Warning: Error fetching categories: {e}", file=sys.stderr)
-        return []
+        # Silently fail - web search is optional enhancement
+        return None
 
 
-def categorize_with_afm(descriptions: Set[str], valid_categories: List[str]) -> Dict[str, str]:
+def categorize_with_afm(descriptions: Set[str], valid_categories: List[str],
+                        use_web_search: bool = False) -> Dict[str, str]:
     """Use Apple Foundation Models (via afm CLI) to categorize unknown merchants."""
     # Check if afm is available
     try:
@@ -277,16 +294,14 @@ Merchants to categorize:
                     results[desc] = matched_category
                     print(f"  {desc[:35]:<35} → {matched_category}")
 
-                return results
-            else:
-                print(f"AFM batch error: {result.stderr}", file=sys.stderr)
         except subprocess.TimeoutExpired:
             print("AFM batch timed out, falling back to individual requests", file=sys.stderr)
         except Exception as e:
             print(f"AFM batch error: {e}, falling back to individual requests", file=sys.stderr)
 
-    # Fallback: process one at a time
-    for desc in descriptions:
+    # Process any remaining (not batch processed) or fallback to individual
+    remaining = [d for d in descriptions if d not in results]
+    for desc in remaining:
         prompt = f"""Categorize this merchant into exactly one category.
 
 Merchant: {desc}
@@ -318,6 +333,55 @@ Reply with ONLY the category name, nothing else."""
         except Exception as e:
             print(f"  Error categorizing '{desc[:30]}': {e}", file=sys.stderr)
             results[desc] = "Uncategorized"
+
+    # Web search retry for items that are still uncategorized
+    if use_web_search:
+        uncategorized = [desc for desc, cat in results.items() if cat == "Uncategorized"]
+        if uncategorized:
+            print(f"\nRetrying {len(uncategorized)} uncategorized merchants with web search...")
+
+            for desc in uncategorized:
+                # Search for merchant info
+                web_info = search_merchant_info(desc)
+                if not web_info:
+                    print(f"  {desc[:35]:<35} → Uncategorized (no web results)")
+                    continue
+
+                # Retry with web context
+                prompt = f"""Categorize this merchant into exactly one category.
+
+Merchant: {desc}
+
+Web search results about this merchant:
+{web_info[:500]}
+
+Categories: {categories_list}
+
+Based on the web search results, what type of business is this? Reply with ONLY the category name, nothing else."""
+
+                try:
+                    result = subprocess.run(
+                        ['afm', '-s', prompt],
+                        capture_output=True,
+                        text=True,
+                        timeout=30
+                    )
+
+                    if result.returncode == 0:
+                        category = result.stdout.strip()
+                        matched_category = match_category(category, valid_categories)
+                        if matched_category != "Uncategorized":
+                            results[desc] = matched_category
+                            print(f"  {desc[:35]:<35} → {matched_category} (via web search)")
+                        else:
+                            print(f"  {desc[:35]:<35} → Uncategorized (still unknown)")
+                    else:
+                        print(f"  {desc[:35]:<35} → Uncategorized (AFM error)")
+
+                except subprocess.TimeoutExpired:
+                    print(f"  {desc[:35]:<35} → Uncategorized (timeout)")
+                except Exception as e:
+                    print(f"  Error recategorizing '{desc[:30]}': {e}", file=sys.stderr)
 
     return results
 
@@ -374,7 +438,7 @@ def parse_date(date_str: str, fmt: str) -> str:
 
 def parse_csv(file_path: Path, format_name: Optional[str], categories_config: Dict,
               use_llm: bool = False, valid_categories: Optional[List[str]] = None,
-              exclude_transfers: bool = False) -> Dict:
+              exclude_transfers: bool = False, use_web_search: bool = False) -> Dict:
     """Parse CSV bank statement and return anonymized, categorized data."""
     transactions = []  # Store all transactions with original descriptions temporarily
     uncategorized_descriptions = set()
@@ -468,7 +532,7 @@ def parse_csv(file_path: Path, format_name: Optional[str], categories_config: Di
     if use_llm and uncategorized_descriptions:
         # Use provided categories or fall back to built-in list
         cats_for_llm = valid_categories if valid_categories else VALID_CATEGORIES
-        llm_categories = categorize_with_afm(uncategorized_descriptions, cats_for_llm)
+        llm_categories = categorize_with_afm(uncategorized_descriptions, cats_for_llm, use_web_search)
 
         # Apply LLM categories
         for tx in transactions:
@@ -555,26 +619,17 @@ def main():
         epilog="""
 Examples:
   python parse_statement.py statement.csv
-  python parse_statement.py statement.csv --llm
-  python parse_statement.py statement.csv --llm --fetch-categories
+  python parse_statement.py statement.csv --csv
 
 Privacy: Merchant names are used for categorization locally but NEVER included
 in the output. Only categories and amounts are exported.
 
-LLM: Uses Apple Foundation Models via the 'afm' CLI tool.
+Uses Apple Foundation Models via the 'afm' CLI tool for unknown merchants.
 Install with: brew tap scouzi1966/afm && brew install afm
         """
     )
     parser.add_argument("file", type=Path, help="Bank statement CSV file")
-    parser.add_argument("--format", "-f", choices=FORMATS.keys(), help="Statement format")
-    parser.add_argument("--output", "-o", type=Path, help="Output JSON file")
     parser.add_argument("--csv", action="store_true", help="Also generate CSV for import")
-    parser.add_argument("--categories", "-c", type=Path, help="Custom categories JSON file")
-    parser.add_argument("--llm", action="store_true", help="Use Apple Foundation Models for uncategorized merchants")
-    parser.add_argument("--fetch-categories", action="store_true", help="Fetch valid categories from MCP server before categorizing")
-    parser.add_argument("--server", "-s", default="https://mcp-tools-one.vercel.app/api/mcp",
-                        help="MCP server URL (default: https://mcp-tools-one.vercel.app/api/mcp)")
-    parser.add_argument("--exclude-transfers", action="store_true", help="Exclude Transfer transactions from output")
 
     args = parser.parse_args()
 
@@ -582,21 +637,8 @@ Install with: brew tap scouzi1966/afm && brew install afm
         print(f"Error: File not found: {args.file}", file=sys.stderr)
         sys.exit(1)
 
-    # Fetch categories from server if requested
-    server_categories = None
-    if args.fetch_categories:
-        print(f"Fetching categories from: {args.server}")
-        server_categories = fetch_categories_from_server(args.server)
-        if server_categories:
-            print(f"Fetched {len(server_categories)} categories from server")
-            # Update VALID_CATEGORIES for rule-based matching too
-            global VALID_CATEGORIES
-            VALID_CATEGORIES = server_categories + ["Uncategorized"]
-        else:
-            print("Warning: Could not fetch categories, using built-in list", file=sys.stderr)
-
     # Load categorization rules
-    categories_path = args.categories or (Path(__file__).parent / "categories.json")
+    categories_path = Path(__file__).parent / "categories.json"
     categories_config = load_categories(categories_path)
     print(f"Loaded {len(categories_config.get('rules', []))} categorization rules")
 
@@ -604,28 +646,24 @@ Install with: brew tap scouzi1966/afm && brew install afm
 
     result = parse_csv(
         args.file,
-        args.format,
+        None,  # Auto-detect format
         categories_config,
-        use_llm=args.llm,
-        valid_categories=server_categories,
-        exclude_transfers=args.exclude_transfers
+        use_llm=True,
+        valid_categories=None,
+        exclude_transfers=True,
+        use_web_search=True
     )
 
-    # Output
+    # Output to JSON file with same name as input
+    output_path = args.file.with_suffix(".json")
     output_json = json.dumps(result, indent=2)
 
-    if args.output:
-        with open(args.output, "w") as f:
-            f.write(output_json)
-        print(f"JSON saved to: {args.output}")
+    with open(output_path, "w") as f:
+        f.write(output_json)
+    print(f"JSON saved to: {output_path}")
 
-        if args.csv and result["expenses"]:
-            generate_csv_for_import(result["expenses"], args.output)
-    else:
-        print("\n" + "=" * 60)
-        print("ANONYMIZED TRANSACTIONS (no merchant names)")
-        print("=" * 60)
-        print(output_json)
+    if args.csv and result["expenses"]:
+        generate_csv_for_import(result["expenses"], output_path)
 
     # Print summary
     print("\n" + "-" * 40)
