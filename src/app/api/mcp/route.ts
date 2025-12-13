@@ -1299,7 +1299,7 @@ const handler = createMcpHandler(
         serviceType: z.string().describe(`Service type (e.g., ${SERVICE_TYPES.slice(0, 5).join(', ')})`),
         odometer: z.number().int().min(0).optional().describe('Odometer reading at service (km)'),
         cost: z.number().min(0).optional().describe('Amount actually paid for service'),
-        serviceTotalValue: z.number().min(0).optional().describe('Total value of service before any discounts or service plan coverage'),
+        serviceTotalValue: z.coerce.number().min(0).optional().describe('Total value of service before any discounts or service plan coverage'),
         provider: z.string().max(100).optional().describe('Service provider name'),
         notes: z.string().optional().describe('Service notes'),
         parts: z.array(z.object({
@@ -1433,7 +1433,7 @@ const handler = createMcpHandler(
         serviceType: z.string().optional().describe('New service type'),
         odometer: z.number().int().min(0).optional().describe('New odometer reading'),
         cost: z.number().min(0).optional().describe('New amount paid'),
-        serviceTotalValue: z.number().min(0).optional().describe('New service total value'),
+        serviceTotalValue: z.coerce.number().min(0).optional().describe('New service total value'),
         provider: z.string().optional().describe('New provider'),
         notes: z.string().optional().describe('New notes'),
       },
