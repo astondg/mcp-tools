@@ -2822,7 +2822,7 @@ async function authenticatedHandler(req: Request) {
     }
 
     // Check if token is expired
-    if (accessToken.accessTokenExpiresAt < new Date()) {
+    if (accessToken.accessTokenExpiresAt && accessToken.accessTokenExpiresAt < new Date()) {
       return new Response(JSON.stringify({ error: 'Unauthorized - Token expired' }), {
         status: 401,
         headers: {
