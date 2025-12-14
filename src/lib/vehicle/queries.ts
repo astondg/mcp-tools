@@ -235,18 +235,55 @@ export async function getServiceHistory(filters: {
   endDate?: Date;
   includeParts?: boolean;
   limit?: number;
+  // New search parameters
+  providerSearch?: string;
+  notesSearch?: string;
+  partNameSearch?: string;
+  searchTerm?: string;
 }): Promise<ServiceRecordResponse[]> {
   const shouldIncludeParts = filters.includeParts !== false;
 
-  const records = await prisma.serviceRecord.findMany({
-    where: {
-      vehicleId: filters.vehicleId,
-      serviceType: filters.serviceType,
-      serviceDate: {
-        gte: filters.startDate,
-        lte: filters.endDate,
-      },
+  // Build search conditions
+  const searchConditions: Array<Record<string, unknown>> = [];
+
+  if (filters.searchTerm) {
+    // Search provider, notes, and service type
+    searchConditions.push(
+      { provider: { contains: filters.searchTerm, mode: 'insensitive' } },
+      { notes: { contains: filters.searchTerm, mode: 'insensitive' } },
+      { serviceType: { contains: filters.searchTerm, mode: 'insensitive' } }
+    );
+  }
+
+  if (filters.providerSearch) {
+    searchConditions.push(
+      { provider: { contains: filters.providerSearch, mode: 'insensitive' } }
+    );
+  }
+
+  if (filters.notesSearch) {
+    searchConditions.push(
+      { notes: { contains: filters.notesSearch, mode: 'insensitive' } }
+    );
+  }
+
+  const whereClause: Record<string, unknown> = {
+    vehicleId: filters.vehicleId,
+    serviceType: filters.serviceType,
+    serviceDate: {
+      gte: filters.startDate,
+      lte: filters.endDate,
     },
+  };
+
+  // Add OR condition for search if any search terms provided
+  if (searchConditions.length > 0) {
+    whereClause.OR = searchConditions;
+  }
+
+  // For part name search, we need to filter after fetching
+  let records = await prisma.serviceRecord.findMany({
+    where: whereClause,
     include: {
       vehicle: true,
       serviceParts: shouldIncludeParts ? {
@@ -256,8 +293,31 @@ export async function getServiceHistory(filters: {
       } : false,
     },
     orderBy: { serviceDate: 'desc' },
-    take: filters.limit ?? 50,
+    take: filters.partNameSearch ? undefined : (filters.limit ?? 50),
   });
+
+  // If searching by part name, filter records that have matching parts
+  if (filters.partNameSearch && shouldIncludeParts) {
+    const searchLower = filters.partNameSearch.toLowerCase();
+    records = records.filter((record) => {
+      // Type assertion needed due to conditional include
+      const serviceParts = (record.serviceParts as unknown) as Array<{
+        part: { name: string; partNumber: string | null; manufacturer: string | null };
+      }> | undefined;
+
+      if (!serviceParts) return false;
+      return serviceParts.some(
+        (sp) =>
+          sp.part.name.toLowerCase().includes(searchLower) ||
+          (sp.part.partNumber && sp.part.partNumber.toLowerCase().includes(searchLower)) ||
+          (sp.part.manufacturer && sp.part.manufacturer.toLowerCase().includes(searchLower))
+      );
+    });
+    // Apply limit after filtering
+    if (filters.limit) {
+      records = records.slice(0, filters.limit);
+    }
+  }
 
   return records.map((record) => {
     // Type assertion needed due to conditional include

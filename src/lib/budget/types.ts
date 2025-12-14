@@ -224,3 +224,85 @@ export interface BudgetVsActualsResponse {
     projectedVariance: number;  // Projected vs budgeted
   };
 }
+
+// Extended expense response with aggregates for search results
+export interface ExpenseSearchResponse {
+  expenses: ExpenseResponse[];
+  aggregates: {
+    totalAmount: number;
+    count: number;
+    averageAmount: number;
+    minAmount: number;
+    maxAmount: number;
+  };
+}
+
+// Expense analytics types
+export type ExpenseAnalyticsGroupBy = 'merchant' | 'category' | 'month' | 'week' | 'dayOfWeek';
+
+export interface ExpenseAnalyticsItem {
+  groupKey: string;
+  groupLabel: string;
+  total: number;
+  count: number;
+  average: number;
+  percentOfTotal: number;
+}
+
+export interface ExpenseAnalyticsResponse {
+  startDate: Date;
+  endDate: Date;
+  groupBy: ExpenseAnalyticsGroupBy;
+  searchTerm?: string;
+  items: ExpenseAnalyticsItem[];
+  grandTotal: number;
+  transactionCount: number;
+}
+
+// Spending insights types
+export interface SpendingInsight {
+  type: 'unusual_spending' | 'trending_up' | 'trending_down' | 'on_track' | 'over_budget' | 'top_merchant';
+  severity: 'info' | 'warning' | 'alert';
+  title: string;
+  description: string;
+  data: {
+    amount?: number;
+    percentChange?: number;
+    category?: string;
+    merchant?: string;
+    period?: string;
+  };
+}
+
+export interface SpendingInsightsResponse {
+  period: string;
+  startDate: Date;
+  endDate: Date;
+  insights: SpendingInsight[];
+  summary: {
+    totalSpent: number;
+    averageDailySpend: number;
+    topCategory: string;
+    topMerchant: string;
+    comparedToPreviousPeriod: number; // percentage change
+  };
+}
+
+// Categorization suggestion for uncategorized expenses
+export interface ExpenseCategorizationSuggestion {
+  expenseId: string;
+  description: string;
+  amount: number;
+  date: Date;
+  suggestedCategory: string | null;
+  suggestedCategoryId: string | null;
+  confidence: 'high' | 'medium' | 'low' | 'none';
+  matchedRule?: {
+    pattern: string;
+    matchType: string;
+  };
+  similarExpenses?: Array<{
+    description: string;
+    category: string;
+  }>;
+}

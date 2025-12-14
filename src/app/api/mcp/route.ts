@@ -44,8 +44,11 @@ import {
   getExpenseTotals,
   getIncomeTotals,
   getBudgetVsActuals,
+  getExpenseAnalytics,
+  getSpendingInsights,
+  getCategorizationSuggestions,
 } from '@/lib/budget/queries';
-import type { ExpenseGroupBy, IncomeGroupBy } from '@/lib/budget/types';
+import type { ExpenseGroupBy, IncomeGroupBy, ExpenseAnalyticsGroupBy, ExpenseSearchResponse } from '@/lib/budget/types';
 import { BUDGET_PERIODS } from '@/lib/budget/types';
 
 // Type definitions
@@ -1375,7 +1378,7 @@ const handler = createMcpHandler(
     // Get service history
     server.tool(
       'vehicle_get_services',
-      'Get service history for vehicles, with optional filters',
+      'Get service history for vehicles, with optional filters and text search. Use searchTerm to find services by provider, notes, or service type. Use providerSearch to find services at a specific shop (e.g., "costco", "repco").',
       {
         vehicleId: z.string().uuid().optional().describe('Filter by vehicle ID'),
         serviceType: z.string().optional().describe('Filter by service type'),
@@ -1383,6 +1386,11 @@ const handler = createMcpHandler(
         endDate: z.string().optional().describe('End date (YYYY-MM-DD)'),
         includeParts: z.boolean().optional().describe('Include parts details (default: true)'),
         limit: z.number().int().min(1).max(100).optional().describe('Max results (default: 50)'),
+        // New search parameters
+        searchTerm: z.string().optional().describe('Search in provider, notes, and service type (case-insensitive)'),
+        providerSearch: z.string().optional().describe('Search specifically for services at a provider/shop (case-insensitive)'),
+        notesSearch: z.string().optional().describe('Search specifically in service notes (case-insensitive)'),
+        partNameSearch: z.string().optional().describe('Search for services that used a specific part (searches part name, number, manufacturer)'),
       },
       async (params) => {
         try {
@@ -1393,6 +1401,10 @@ const handler = createMcpHandler(
             endDate: params.endDate ? new Date(params.endDate) : undefined,
             includeParts: params.includeParts,
             limit: params.limit,
+            searchTerm: params.searchTerm,
+            providerSearch: params.providerSearch,
+            notesSearch: params.notesSearch,
+            partNameSearch: params.partNameSearch,
           });
 
           if (records.length === 0) {
@@ -2024,7 +2036,7 @@ const handler = createMcpHandler(
     // Get expenses
     server.tool(
       'expense_get',
-      'Query expenses with filters for date range, category, amount, etc.',
+      'Query expenses with filters for date range, category, amount, and text search. Use searchTerm to find expenses by merchant name or description (e.g., "pop mart", "costco"). Use includeAggregates=true to get totals without needing to sum manually.',
       {
         startDate: z.string().optional().describe('Start date (YYYY-MM-DD)'),
         endDate: z.string().optional().describe('End date (YYYY-MM-DD)'),
@@ -2033,10 +2045,15 @@ const handler = createMcpHandler(
         maxAmount: z.number().optional().describe('Maximum amount'),
         source: z.enum(['MANUAL', 'BANK_IMPORT']).optional().describe('Filter by source'),
         limit: z.number().int().min(1).max(100).optional().describe('Max results (default: 50)'),
+        // New search parameters
+        searchTerm: z.string().optional().describe('Search in both description AND merchantName (case-insensitive). Use this for queries like "how much did I spend at Pop Mart"'),
+        merchantName: z.string().optional().describe('Search specifically in merchantName field (case-insensitive)'),
+        descriptionSearch: z.string().optional().describe('Search specifically in description field (case-insensitive)'),
+        includeAggregates: z.boolean().optional().describe('If true, returns totals (sum, count, avg, min, max) across ALL matching expenses (not just the returned limit). Great for "how much total" queries.'),
       },
       async (params) => {
         try {
-          const expenses = await getExpenses({
+          const result = await getExpenses({
             startDate: params.startDate ? new Date(params.startDate) : undefined,
             endDate: params.endDate ? new Date(params.endDate) : undefined,
             categoryName: params.category,
@@ -2044,16 +2061,58 @@ const handler = createMcpHandler(
             maxAmount: params.maxAmount,
             source: params.source,
             limit: params.limit,
+            searchTerm: params.searchTerm,
+            merchantName: params.merchantName,
+            descriptionSearch: params.descriptionSearch,
+            includeAggregates: params.includeAggregates,
           });
 
-          if (expenses.length === 0) {
+          // Handle aggregates response
+          if (params.includeAggregates && 'aggregates' in result) {
+            const searchResult = result as ExpenseSearchResponse;
+            const expenses = searchResult.expenses;
+            const agg = searchResult.aggregates;
+
+            if (expenses.length === 0) {
+              return {
+                content: [{ type: 'text', text: 'No expenses found matching your criteria.' }]
+              };
+            }
+
+            const expenseList = expenses.slice(0, 10).map(exp =>
+              `• **${exp.date.toISOString().split('T')[0]}** - $${exp.amount.toFixed(2)}\n` +
+              `  ${exp.description}` +
+              (exp.merchantName ? ` (${exp.merchantName})` : '') +
+              ` [${exp.categoryName}]`
+            ).join('\n\n');
+
+            const showingText = expenses.length > 10 ? ` (showing first 10 of ${expenses.length} returned)` : '';
+
+            return {
+              content: [{
+                type: 'text',
+                text: `💸 **Expense Search Results**${params.searchTerm ? ` for "${params.searchTerm}"` : ''}\n\n` +
+                      `📊 **Aggregates (all ${agg.count} matching expenses):**\n` +
+                      `• Total: **$${agg.totalAmount.toFixed(2)}**\n` +
+                      `• Count: ${agg.count} transactions\n` +
+                      `• Average: $${agg.averageAmount.toFixed(2)}\n` +
+                      `• Range: $${agg.minAmount.toFixed(2)} - $${agg.maxAmount.toFixed(2)}\n\n` +
+                      `📋 **Sample Transactions**${showingText}:\n\n${expenseList}`
+              }]
+            };
+          }
+
+          // Standard response (array of expenses)
+          const expenses = result as Awaited<ReturnType<typeof getExpenses>> extends (infer T)[] ? T[] : never;
+
+          if (!Array.isArray(result) || result.length === 0) {
             return {
               content: [{ type: 'text', text: 'No expenses found matching your criteria.' }]
             };
           }
 
-          const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-          const expenseList = expenses.map(exp =>
+          const total = result.reduce((sum, exp) => sum + exp.amount, 0);
+          const expenseList = result.map(exp =>
             `• **${exp.date.toISOString().split('T')[0]}** - $${exp.amount.toFixed(2)}\n` +
             `  ID: ${exp.id}\n` +
             `  Category: ${exp.categoryName}\n` +
@@ -2064,7 +2123,7 @@ const handler = createMcpHandler(
           return {
             content: [{
               type: 'text',
-              text: `💸 Expenses (${expenses.length} items, Total: $${total.toFixed(2)}):\n\n${expenseList}`
+              text: `💸 Expenses (${result.length} items, Total: $${total.toFixed(2)}):\n\n${expenseList}`
             }]
           };
         } catch (error) {
@@ -2642,6 +2701,183 @@ const handler = createMcpHandler(
           };
         } catch (error) {
           console.error('Error in budget_vs_actuals:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Expense Analytics - Advanced grouping and aggregation
+    server.tool(
+      'expense_analytics',
+      'Get expense analytics with flexible grouping options. Perfect for questions like "top merchants by spend", "spending by day of week", "monthly trend for a merchant". Groups expenses and provides totals, counts, averages, and percentages.',
+      {
+        startDate: z.string().describe('Start date (YYYY-MM-DD)'),
+        endDate: z.string().describe('End date (YYYY-MM-DD)'),
+        groupBy: z.enum(['merchant', 'category', 'month', 'week', 'dayOfWeek']).describe('How to group results: merchant (by vendor/store), category, month, week, or dayOfWeek'),
+        searchTerm: z.string().optional().describe('Optional: filter to expenses matching this term in description or merchantName'),
+        category: z.string().optional().describe('Optional: filter to a specific category'),
+        limit: z.number().int().min(1).max(50).optional().describe('Max groups to return (default: all). Use for "top 10" queries.'),
+        sortBy: z.enum(['amount', 'count']).optional().describe('Sort by total amount (default) or transaction count'),
+      },
+      async (params) => {
+        try {
+          const analytics = await getExpenseAnalytics({
+            startDate: new Date(params.startDate),
+            endDate: new Date(params.endDate),
+            groupBy: params.groupBy as ExpenseAnalyticsGroupBy,
+            searchTerm: params.searchTerm,
+            categoryName: params.category,
+            limit: params.limit,
+            sortBy: params.sortBy,
+          });
+
+          if (analytics.items.length === 0) {
+            return {
+              content: [{ type: 'text', text: 'No expenses found matching your criteria.' }]
+            };
+          }
+
+          let response = `📊 **Expense Analytics**${params.searchTerm ? ` (filtered: "${params.searchTerm}")` : ''}\n`;
+          response += `Period: ${analytics.startDate.toISOString().split('T')[0]} to ${analytics.endDate.toISOString().split('T')[0]}\n`;
+          response += `Grouped by: ${analytics.groupBy}\n\n`;
+
+          response += `| ${analytics.groupBy === 'merchant' ? 'Merchant' : analytics.groupBy === 'category' ? 'Category' : 'Period'} | Total | Count | Avg | % of Total |\n`;
+          response += `|----------|-------|-------|-----|------------|\n`;
+
+          for (const item of analytics.items) {
+            response += `| ${item.groupLabel} | $${item.total.toFixed(2)} | ${item.count} | $${item.average.toFixed(2)} | ${item.percentOfTotal.toFixed(1)}% |\n`;
+          }
+
+          response += `\n---\n`;
+          response += `**Grand Total**: $${analytics.grandTotal.toFixed(2)} across ${analytics.transactionCount} transactions`;
+
+          return {
+            content: [{ type: 'text', text: response }]
+          };
+        } catch (error) {
+          console.error('Error in expense_analytics:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Spending Insights - Automatic analysis and alerts
+    server.tool(
+      'budget_spending_insights',
+      'Get AI-generated spending insights for a budget period. Returns alerts about unusual spending, budget warnings, top merchants, and trends compared to the previous period. Use this for proactive budget monitoring.',
+      {
+        period: z.enum(['WEEKLY', 'FORTNIGHTLY', 'MONTHLY', 'QUARTERLY', 'YEARLY']).describe('Budget period to analyze'),
+        startDate: z.string().optional().describe('Start date (YYYY-MM-DD) - defaults to current period'),
+      },
+      async (params) => {
+        try {
+          const insights = await getSpendingInsights({
+            period: params.period,
+            startDate: params.startDate ? new Date(params.startDate) : undefined,
+          });
+
+          const severityIcon = (severity: string) => {
+            switch (severity) {
+              case 'alert': return '🔴';
+              case 'warning': return '⚠️';
+              case 'info': return 'ℹ️';
+              default: return '•';
+            }
+          };
+
+          let response = `💡 **Spending Insights** (${insights.period})\n`;
+          response += `Period: ${insights.startDate.toISOString().split('T')[0]} to ${insights.endDate.toISOString().split('T')[0]}\n\n`;
+
+          response += `📈 **Summary**\n`;
+          response += `• Total Spent: $${insights.summary.totalSpent.toFixed(2)}\n`;
+          response += `• Daily Average: $${insights.summary.averageDailySpend.toFixed(2)}\n`;
+          response += `• Top Category: ${insights.summary.topCategory}\n`;
+          response += `• Top Merchant: ${insights.summary.topMerchant}\n`;
+          response += `• vs Previous Period: ${insights.summary.comparedToPreviousPeriod >= 0 ? '+' : ''}${insights.summary.comparedToPreviousPeriod.toFixed(1)}%\n\n`;
+
+          if (insights.insights.length > 0) {
+            response += `🔍 **Insights & Alerts**\n`;
+            for (const insight of insights.insights) {
+              response += `${severityIcon(insight.severity)} **${insight.title}**\n`;
+              response += `   ${insight.description}\n`;
+            }
+          } else {
+            response += `✅ No notable insights for this period - spending looks normal.`;
+          }
+
+          return {
+            content: [{ type: 'text', text: response }]
+          };
+        } catch (error) {
+          console.error('Error in budget_spending_insights:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Expense Categorization Suggestions
+    server.tool(
+      'expense_categorize_suggestions',
+      'Get suggestions for categorizing uncategorized or miscellaneous expenses. Uses existing categorization rules and pattern matching from similar expenses to suggest categories. Great for cleaning up imported bank transactions.',
+      {
+        limit: z.number().int().min(1).max(50).optional().describe('Max suggestions to return (default: 20)'),
+      },
+      async (params) => {
+        try {
+          const suggestions = await getCategorizationSuggestions({
+            limit: params.limit,
+          });
+
+          if (suggestions.length === 0) {
+            return {
+              content: [{ type: 'text', text: '✅ No uncategorized expenses found that need attention.' }]
+            };
+          }
+
+          const confidenceIcon = (conf: string) => {
+            switch (conf) {
+              case 'high': return '✅';
+              case 'medium': return '🟡';
+              case 'low': return '🟠';
+              default: return '❓';
+            }
+          };
+
+          let response = `🏷️ **Categorization Suggestions** (${suggestions.length} expenses)\n\n`;
+
+          for (const sugg of suggestions) {
+            response += `**${sugg.description}**\n`;
+            response += `• Amount: $${sugg.amount.toFixed(2)} | Date: ${sugg.date.toISOString().split('T')[0]}\n`;
+            response += `• ID: ${sugg.expenseId}\n`;
+
+            if (sugg.suggestedCategory) {
+              response += `• ${confidenceIcon(sugg.confidence)} Suggested: **${sugg.suggestedCategory}** (${sugg.confidence} confidence)\n`;
+              if (sugg.matchedRule) {
+                response += `  Rule: "${sugg.matchedRule.pattern}" (${sugg.matchedRule.matchType})\n`;
+              }
+              if (sugg.similarExpenses && sugg.similarExpenses.length > 0) {
+                response += `  Similar: ${sugg.similarExpenses.map(s => `"${s.description}" → ${s.category}`).join(', ')}\n`;
+              }
+            } else {
+              response += `• ❓ No suggestion - consider creating a categorization rule\n`;
+            }
+            response += '\n';
+          }
+
+          response += `---\n`;
+          response += `💡 Use \`expense_update\` to apply a category, or \`categorization_add_rule\` to create auto-categorization rules.`;
+
+          return {
+            content: [{ type: 'text', text: response }]
+          };
+        } catch (error) {
+          console.error('Error in expense_categorize_suggestions:', error);
           return {
             content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
           };

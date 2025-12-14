@@ -22,6 +22,13 @@ import type {
   IncomeTotalItem,
   BudgetVsActualsResponse,
   BudgetVsActualCategory,
+  ExpenseSearchResponse,
+  ExpenseAnalyticsGroupBy,
+  ExpenseAnalyticsResponse,
+  ExpenseAnalyticsItem,
+  SpendingInsightsResponse,
+  SpendingInsight,
+  ExpenseCategorizationSuggestion,
 } from './types';
 
 // Helper to convert Decimal to number
@@ -284,7 +291,12 @@ export async function getExpenses(filters: {
   maxAmount?: number;
   source?: ExpenseSource;
   limit?: number;
-}): Promise<ExpenseResponse[]> {
+  // New search parameters
+  searchTerm?: string;
+  merchantName?: string;
+  descriptionSearch?: string;
+  includeAggregates?: boolean;
+}): Promise<ExpenseResponse[] | ExpenseSearchResponse> {
   let categoryId: string | undefined;
 
   if (filters.categoryName) {
@@ -296,19 +308,49 @@ export async function getExpenses(filters: {
     }
   }
 
-  const expenses = await prisma.expense.findMany({
-    where: {
-      date: {
-        gte: filters.startDate,
-        lte: filters.endDate,
-      },
-      categoryId,
-      amount: {
-        gte: filters.minAmount,
-        lte: filters.maxAmount,
-      },
-      source: filters.source,
+  // Build search conditions
+  const searchConditions: Array<Record<string, unknown>> = [];
+
+  if (filters.searchTerm) {
+    // Search both description and merchantName
+    searchConditions.push(
+      { description: { contains: filters.searchTerm, mode: 'insensitive' } },
+      { merchantName: { contains: filters.searchTerm, mode: 'insensitive' } }
+    );
+  }
+
+  if (filters.merchantName) {
+    searchConditions.push(
+      { merchantName: { contains: filters.merchantName, mode: 'insensitive' } }
+    );
+  }
+
+  if (filters.descriptionSearch) {
+    searchConditions.push(
+      { description: { contains: filters.descriptionSearch, mode: 'insensitive' } }
+    );
+  }
+
+  const whereClause: Record<string, unknown> = {
+    date: {
+      gte: filters.startDate,
+      lte: filters.endDate,
     },
+    categoryId,
+    amount: {
+      gte: filters.minAmount,
+      lte: filters.maxAmount,
+    },
+    source: filters.source,
+  };
+
+  // Add OR condition for search if any search terms provided
+  if (searchConditions.length > 0) {
+    whereClause.OR = searchConditions;
+  }
+
+  const expenses = await prisma.expense.findMany({
+    where: whereClause,
     include: {
       category: true,
     },
@@ -316,7 +358,7 @@ export async function getExpenses(filters: {
     take: filters.limit ?? 50,
   });
 
-  return expenses.map((exp) => ({
+  const mappedExpenses = expenses.map((exp) => ({
     id: exp.id,
     date: exp.date,
     amount: decimalToNumber(exp.amount),
@@ -329,6 +371,32 @@ export async function getExpenses(filters: {
     notes: exp.notes,
     createdAt: exp.createdAt,
   }));
+
+  // Return with aggregates if requested
+  if (filters.includeAggregates) {
+    // Get full count and sum (without limit) for aggregates
+    const aggregateResult = await prisma.expense.aggregate({
+      where: whereClause,
+      _sum: { amount: true },
+      _count: true,
+      _avg: { amount: true },
+      _min: { amount: true },
+      _max: { amount: true },
+    });
+
+    return {
+      expenses: mappedExpenses,
+      aggregates: {
+        totalAmount: decimalToNumber(aggregateResult._sum.amount),
+        count: aggregateResult._count,
+        averageAmount: decimalToNumber(aggregateResult._avg.amount),
+        minAmount: decimalToNumber(aggregateResult._min.amount),
+        maxAmount: decimalToNumber(aggregateResult._max.amount),
+      },
+    };
+  }
+
+  return mappedExpenses;
 }
 
 export async function updateExpense(
@@ -1546,4 +1614,451 @@ export async function getBudgetVsActuals(filters: {
       projectedVariance,
     },
   };
+}
+
+// ==========================================
+// Expense Analytics
+// ==========================================
+
+export async function getExpenseAnalytics(filters: {
+  startDate: Date;
+  endDate: Date;
+  groupBy: ExpenseAnalyticsGroupBy;
+  searchTerm?: string;
+  categoryName?: string;
+  limit?: number;
+  sortBy?: 'amount' | 'count';
+}): Promise<ExpenseAnalyticsResponse> {
+  let categoryId: string | undefined;
+
+  if (filters.categoryName) {
+    const category = await prisma.budgetCategory.findUnique({
+      where: { name: filters.categoryName },
+    });
+    if (category) {
+      categoryId = category.id;
+    }
+  }
+
+  // Build search conditions
+  const searchConditions: Array<Record<string, unknown>> = [];
+  if (filters.searchTerm) {
+    searchConditions.push(
+      { description: { contains: filters.searchTerm, mode: 'insensitive' } },
+      { merchantName: { contains: filters.searchTerm, mode: 'insensitive' } }
+    );
+  }
+
+  const whereClause: Record<string, unknown> = {
+    date: {
+      gte: filters.startDate,
+      lte: filters.endDate,
+    },
+    categoryId,
+  };
+
+  if (searchConditions.length > 0) {
+    whereClause.OR = searchConditions;
+  }
+
+  const expenses = await prisma.expense.findMany({
+    where: whereClause,
+    include: {
+      category: true,
+    },
+    orderBy: { date: 'asc' },
+  });
+
+  const groupedTotals = new Map<string, { label: string; total: number; count: number }>();
+
+  for (const expense of expenses) {
+    let groupKey: string;
+    let groupLabel: string;
+
+    switch (filters.groupBy) {
+      case 'merchant':
+        groupKey = (expense.merchantName || expense.description.split(' ').slice(0, 3).join(' ')).toLowerCase();
+        groupLabel = expense.merchantName || expense.description.split(' ').slice(0, 3).join(' ');
+        break;
+      case 'category':
+        groupKey = expense.category.name;
+        groupLabel = expense.category.name;
+        break;
+      case 'month':
+        const monthDate = expense.date;
+        groupKey = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}`;
+        groupLabel = monthDate.toLocaleDateString('en-AU', { year: 'numeric', month: 'long' });
+        break;
+      case 'week':
+        const d = new Date(expense.date);
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+        const week1 = new Date(d.getFullYear(), 0, 4);
+        const weekNum = 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+        groupKey = `${d.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+        groupLabel = `Week ${weekNum}, ${d.getFullYear()}`;
+        break;
+      case 'dayOfWeek':
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const dayNum = expense.date.getDay();
+        groupKey = String(dayNum);
+        groupLabel = dayNames[dayNum];
+        break;
+    }
+
+    const existing = groupedTotals.get(groupKey) || { label: groupLabel, total: 0, count: 0 };
+    existing.total += decimalToNumber(expense.amount);
+    existing.count += 1;
+    groupedTotals.set(groupKey, existing);
+  }
+
+  const grandTotal = Array.from(groupedTotals.values()).reduce((sum, item) => sum + item.total, 0);
+  const transactionCount = Array.from(groupedTotals.values()).reduce((sum, item) => sum + item.count, 0);
+
+  let items: ExpenseAnalyticsItem[] = Array.from(groupedTotals.entries())
+    .map(([groupKey, data]) => ({
+      groupKey,
+      groupLabel: data.label,
+      total: data.total,
+      count: data.count,
+      average: data.count > 0 ? data.total / data.count : 0,
+      percentOfTotal: grandTotal > 0 ? (data.total / grandTotal) * 100 : 0,
+    }));
+
+  // Sort based on sortBy parameter
+  if (filters.sortBy === 'count') {
+    items.sort((a, b) => b.count - a.count);
+  } else {
+    items.sort((a, b) => b.total - a.total);
+  }
+
+  // Apply limit
+  if (filters.limit) {
+    items = items.slice(0, filters.limit);
+  }
+
+  return {
+    startDate: filters.startDate,
+    endDate: filters.endDate,
+    groupBy: filters.groupBy,
+    searchTerm: filters.searchTerm,
+    items,
+    grandTotal,
+    transactionCount,
+  };
+}
+
+// ==========================================
+// Spending Insights
+// ==========================================
+
+export async function getSpendingInsights(filters: {
+  period: BudgetPeriod;
+  startDate?: Date;
+}): Promise<SpendingInsightsResponse> {
+  const { start, end } = getPeriodDateRange(filters.period, filters.startDate);
+
+  // Calculate previous period for comparison
+  const periodLengthMs = end.getTime() - start.getTime();
+  const prevStart = new Date(start.getTime() - periodLengthMs);
+  const prevEnd = new Date(start.getTime() - 1);
+
+  // Get current period expenses
+  const currentExpenses = await prisma.expense.findMany({
+    where: {
+      date: { gte: start, lte: end },
+    },
+    include: { category: true },
+  });
+
+  // Get previous period expenses
+  const prevExpenses = await prisma.expense.findMany({
+    where: {
+      date: { gte: prevStart, lte: prevEnd },
+    },
+    include: { category: true },
+  });
+
+  // Calculate totals
+  const currentTotal = currentExpenses.reduce((sum, exp) => sum + decimalToNumber(exp.amount), 0);
+  const prevTotal = prevExpenses.reduce((sum, exp) => sum + decimalToNumber(exp.amount), 0);
+  const percentChange = prevTotal > 0 ? ((currentTotal - prevTotal) / prevTotal) * 100 : 0;
+
+  // Group by category
+  const categoryTotals = new Map<string, { current: number; prev: number }>();
+  for (const exp of currentExpenses) {
+    const existing = categoryTotals.get(exp.category.name) || { current: 0, prev: 0 };
+    existing.current += decimalToNumber(exp.amount);
+    categoryTotals.set(exp.category.name, existing);
+  }
+  for (const exp of prevExpenses) {
+    const existing = categoryTotals.get(exp.category.name) || { current: 0, prev: 0 };
+    existing.prev += decimalToNumber(exp.amount);
+    categoryTotals.set(exp.category.name, existing);
+  }
+
+  // Group by merchant
+  const merchantTotals = new Map<string, number>();
+  for (const exp of currentExpenses) {
+    const merchant = exp.merchantName || exp.description.split(' ').slice(0, 3).join(' ');
+    const existing = merchantTotals.get(merchant) || 0;
+    merchantTotals.set(merchant, existing + decimalToNumber(exp.amount));
+  }
+
+  // Find top merchant
+  let topMerchant = 'None';
+  let topMerchantAmount = 0;
+  for (const [merchant, amount] of merchantTotals.entries()) {
+    if (amount > topMerchantAmount) {
+      topMerchant = merchant;
+      topMerchantAmount = amount;
+    }
+  }
+
+  // Find top category
+  let topCategory = 'None';
+  let topCategoryAmount = 0;
+  for (const [category, totals] of categoryTotals.entries()) {
+    if (totals.current > topCategoryAmount) {
+      topCategory = category;
+      topCategoryAmount = totals.current;
+    }
+  }
+
+  // Generate insights
+  const insights: SpendingInsight[] = [];
+
+  // Overall spending trend
+  if (percentChange > 20) {
+    insights.push({
+      type: 'trending_up',
+      severity: 'warning',
+      title: 'Spending Increased',
+      description: `Your spending is up ${percentChange.toFixed(1)}% compared to the previous period.`,
+      data: { percentChange, amount: currentTotal },
+    });
+  } else if (percentChange < -20) {
+    insights.push({
+      type: 'trending_down',
+      severity: 'info',
+      title: 'Spending Decreased',
+      description: `Your spending is down ${Math.abs(percentChange).toFixed(1)}% compared to the previous period.`,
+      data: { percentChange, amount: currentTotal },
+    });
+  }
+
+  // Category-specific insights
+  for (const [category, totals] of categoryTotals.entries()) {
+    const catPercentChange = totals.prev > 0 ? ((totals.current - totals.prev) / totals.prev) * 100 : 0;
+    if (catPercentChange > 50 && totals.current > 100) {
+      insights.push({
+        type: 'unusual_spending',
+        severity: 'alert',
+        title: `High ${category} Spending`,
+        description: `${category} spending increased ${catPercentChange.toFixed(1)}% ($${totals.current.toFixed(2)} vs $${totals.prev.toFixed(2)} last period).`,
+        data: { category, percentChange: catPercentChange, amount: totals.current },
+      });
+    }
+  }
+
+  // Top merchant insight
+  if (topMerchantAmount > 0) {
+    const merchantPercent = currentTotal > 0 ? (topMerchantAmount / currentTotal) * 100 : 0;
+    insights.push({
+      type: 'top_merchant',
+      severity: 'info',
+      title: 'Top Merchant',
+      description: `${topMerchant} accounts for ${merchantPercent.toFixed(1)}% of your spending ($${topMerchantAmount.toFixed(2)}).`,
+      data: { merchant: topMerchant, amount: topMerchantAmount },
+    });
+  }
+
+  // Check budget status
+  const budgetCategories = await prisma.budgetCategory.findMany({
+    where: { period: filters.period, isActive: true },
+    include: {
+      expenses: {
+        where: { date: { gte: start, lte: end } },
+      },
+    },
+  });
+
+  for (const cat of budgetCategories) {
+    const budgetAmount = decimalToNumber(cat.budgetAmount);
+    const actualAmount = cat.expenses.reduce((sum, exp) => sum + decimalToNumber(exp.amount), 0);
+    const percentUsed = budgetAmount > 0 ? (actualAmount / budgetAmount) * 100 : 0;
+
+    if (percentUsed > 100) {
+      insights.push({
+        type: 'over_budget',
+        severity: 'alert',
+        title: `Over Budget: ${cat.name}`,
+        description: `${cat.name} is ${(percentUsed - 100).toFixed(1)}% over budget ($${actualAmount.toFixed(2)} of $${budgetAmount.toFixed(2)}).`,
+        data: { category: cat.name, percentChange: percentUsed - 100, amount: actualAmount },
+      });
+    } else if (percentUsed > 80) {
+      insights.push({
+        type: 'on_track',
+        severity: 'warning',
+        title: `Approaching Budget: ${cat.name}`,
+        description: `${cat.name} is at ${percentUsed.toFixed(1)}% of budget ($${actualAmount.toFixed(2)} of $${budgetAmount.toFixed(2)}).`,
+        data: { category: cat.name, percentChange: percentUsed, amount: actualAmount },
+      });
+    }
+  }
+
+  // Calculate days in period for average
+  const daysInPeriod = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  const averageDailySpend = daysInPeriod > 0 ? currentTotal / daysInPeriod : 0;
+
+  return {
+    period: filters.period,
+    startDate: start,
+    endDate: end,
+    insights,
+    summary: {
+      totalSpent: currentTotal,
+      averageDailySpend,
+      topCategory,
+      topMerchant,
+      comparedToPreviousPeriod: percentChange,
+    },
+  };
+}
+
+// ==========================================
+// Expense Categorization Suggestions
+// ==========================================
+
+export async function getCategorizationSuggestions(filters: {
+  limit?: number;
+}): Promise<ExpenseCategorizationSuggestion[]> {
+  // Find expenses that might need better categorization
+  // This looks for expenses with generic descriptions or missing merchantName
+  const uncategorizedCategory = await prisma.budgetCategory.findFirst({
+    where: {
+      OR: [
+        { name: { contains: 'uncategorized', mode: 'insensitive' } },
+        { name: { contains: 'other', mode: 'insensitive' } },
+        { name: { contains: 'misc', mode: 'insensitive' } },
+      ],
+    },
+  });
+
+  // Get rules for matching
+  const rules = await prisma.categorizationRule.findMany({
+    where: { isActive: true },
+    include: { category: true },
+    orderBy: { priority: 'desc' },
+  });
+
+  // Get recent similar expenses for pattern matching
+  const recentExpenses = await prisma.expense.findMany({
+    where: {
+      categoryId: uncategorizedCategory ? { not: uncategorizedCategory.id } : undefined,
+    },
+    include: { category: true },
+    orderBy: { date: 'desc' },
+    take: 500,
+  });
+
+  // Build a map of description patterns to categories
+  const patternToCategory = new Map<string, { category: string; count: number }>();
+  for (const exp of recentExpenses) {
+    const key = exp.description.toLowerCase().split(' ').slice(0, 3).join(' ');
+    const existing = patternToCategory.get(key);
+    if (existing) {
+      existing.count++;
+    } else {
+      patternToCategory.set(key, { category: exp.category.name, count: 1 });
+    }
+  }
+
+  // Get expenses to suggest categorization for
+  const expensesToCategorize = await prisma.expense.findMany({
+    where: uncategorizedCategory ? { categoryId: uncategorizedCategory.id } : undefined,
+    include: { category: true },
+    orderBy: { date: 'desc' },
+    take: filters.limit ?? 20,
+  });
+
+  const suggestions: ExpenseCategorizationSuggestion[] = [];
+
+  for (const expense of expensesToCategorize) {
+    let suggestedCategory: string | null = null;
+    let suggestedCategoryId: string | null = null;
+    let confidence: 'high' | 'medium' | 'low' | 'none' = 'none';
+    let matchedRule: { pattern: string; matchType: string } | undefined;
+    const similarExpenses: Array<{ description: string; category: string }> = [];
+
+    // Try rule-based matching first
+    const descLower = expense.description.toLowerCase();
+    for (const rule of rules) {
+      let matched = false;
+      switch (rule.matchType) {
+        case 'CONTAINS':
+          matched = descLower.includes(rule.pattern.toLowerCase());
+          break;
+        case 'STARTS_WITH':
+          matched = descLower.startsWith(rule.pattern.toLowerCase());
+          break;
+        case 'REGEX':
+          try {
+            const regex = new RegExp(rule.pattern, 'i');
+            matched = regex.test(expense.description);
+          } catch {
+            // Invalid regex
+          }
+          break;
+      }
+
+      if (matched) {
+        suggestedCategory = rule.category.name;
+        suggestedCategoryId = rule.categoryId;
+        confidence = 'high';
+        matchedRule = { pattern: rule.pattern, matchType: rule.matchType };
+        break;
+      }
+    }
+
+    // Try pattern-based matching if no rule matched
+    if (!suggestedCategory) {
+      const key = expense.description.toLowerCase().split(' ').slice(0, 3).join(' ');
+      const pattern = patternToCategory.get(key);
+      if (pattern && pattern.count >= 2) {
+        const cat = await prisma.budgetCategory.findUnique({
+          where: { name: pattern.category },
+        });
+        if (cat) {
+          suggestedCategory = pattern.category;
+          suggestedCategoryId = cat.id;
+          confidence = pattern.count >= 5 ? 'medium' : 'low';
+
+          // Find similar expenses
+          const similar = recentExpenses.filter(
+            (e) =>
+              e.description.toLowerCase().split(' ').slice(0, 3).join(' ') === key &&
+              e.category.name === pattern.category
+          );
+          for (const sim of similar.slice(0, 3)) {
+            similarExpenses.push({ description: sim.description, category: sim.category.name });
+          }
+        }
+      }
+    }
+
+    suggestions.push({
+      expenseId: expense.id,
+      description: expense.description,
+      amount: decimalToNumber(expense.amount),
+      date: expense.date,
+      suggestedCategory,
+      suggestedCategoryId,
+      confidence,
+      matchedRule,
+      similarExpenses: similarExpenses.length > 0 ? similarExpenses : undefined,
+    });
+  }
+
+  return suggestions;
 }
