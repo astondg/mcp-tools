@@ -210,3 +210,136 @@ model Income {
 
   @@map("incomes")
 }
+
+// ==========================================
+// Better Auth - User Authentication
+// ==========================================
+
+model User {
+  id            String    @id @default(uuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false) @map("email_verified")
+  image         String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  sessions Session[]
+  accounts Account[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  expiresAt DateTime @map("expires_at")
+  token     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  userId    String   @map("user_id")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id @default(uuid())
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                String    @map("user_id")
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at")
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("accounts")
+}
+
+model Verification {
+  id         String   @id @default(uuid())
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("verifications")
+}
+
+// ==========================================
+// Better Auth - OIDC/MCP Provider
+// ==========================================
+
+model OauthApplication {
+  id           String   @id @default(uuid())
+  name         String?
+  icon         String?
+  metadata     String?
+  clientId     String   @unique @map("client_id")
+  clientSecret String   @map("client_secret")
+  redirectURLs String   @map("redirect_urls") // JSON array stored as string
+  type         String   @default("web")
+  disabled     Boolean  @default(false)
+  userId       String?  @map("user_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  accessTokens OauthAccessToken[]
+
+  @@map("oauth_applications")
+}
+
+model OauthAccessToken {
+  id            String   @id @default(uuid())
+  accessToken   String   @unique @map("access_token")
+  refreshToken  String?  @unique @map("refresh_token")
+  accessTokenExpiresAt  DateTime @map("access_token_expires_at")
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  clientId      String   @map("client_id")
+  userId        String?  @map("user_id")
+  scopes        String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relations
+  application OauthApplication @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+
+  @@map("oauth_access_tokens")
+}
+
+model OauthConsent {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  clientId      String   @map("client_id")
+  scopes        String
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("oauth_consents")
+}
+
+model OauthCode {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  userId      String   @map("user_id")
+  clientId    String   @map("client_id")
+  scopes      String?
+  redirectURI String   @map("redirect_uri")
+  expiresAt   DateTime @map("expires_at")
+  codeChallenge       String? @map("code_challenge")
+  codeChallengeMethod String? @map("code_challenge_method")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("oauth_codes")
+}

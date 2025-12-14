@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { createMcpHandler } from '@vercel/mcp-adapter';
 import { TokenStorage } from '@/lib/redis';
+import { auth } from '@/lib/auth';
 import {
   createVehicle,
   updateVehicle,
@@ -2785,4 +2786,51 @@ const handler = createMcpHandler(
   },
 );
 
-export { handler as GET, handler as POST, handler as DELETE };
+// Wrap handler with MCP authentication
+async function authenticatedHandler(req: Request) {
+  // Extract bearer token from Authorization header
+  const authHeader = req.headers.get('authorization');
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return new Response(JSON.stringify({ error: 'Unauthorized - Missing bearer token' }), {
+      status: 401,
+      headers: {
+        'Content-Type': 'application/json',
+        'WWW-Authenticate': 'Bearer realm="MCP Tools"',
+      },
+    });
+  }
+
+  const token = authHeader.substring(7); // Remove "Bearer " prefix
+
+  try {
+    // Validate the session using Better Auth's getSession
+    const session = await auth.api.getSession({
+      headers: req.headers,
+    });
+
+    if (!session) {
+      return new Response(JSON.stringify({ error: 'Unauthorized - Invalid session' }), {
+        status: 401,
+        headers: {
+          'Content-Type': 'application/json',
+          'WWW-Authenticate': 'Bearer realm="MCP Tools"',
+        },
+      });
+    }
+
+    // User is authenticated, proceed with the MCP handler
+    return handler(req);
+  } catch (error) {
+    console.error('Auth validation error:', error);
+    return new Response(JSON.stringify({ error: 'Unauthorized - Auth error' }), {
+      status: 401,
+      headers: {
+        'Content-Type': 'application/json',
+        'WWW-Authenticate': 'Bearer realm="MCP Tools"',
+      },
+    });
+  }
+}
+
+export { authenticatedHandler as GET, authenticatedHandler as POST, authenticatedHandler as DELETE };

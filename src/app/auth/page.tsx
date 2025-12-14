@@ -13,7 +13,7 @@ export default function AuthPage() {
 
   const checkAuthStatus = async () => {
     try {
-      const response = await fetch('/api/auth/status');
+      const response = await fetch('/api/freelancer/status');
       const data = await response.json();
       setIsAuthenticated(data.authenticated);
     } catch (error) {
@@ -37,7 +37,7 @@ export default function AuthPage() {
     
     // Build Freelancer OAuth URL
     const clientId = process.env.NEXT_PUBLIC_FREELANCER_CLIENT_ID || '172dab2b-1692-49ff-a80f-59c533454b46';
-    const redirectUri = `${window.location.origin}/api/auth/callback`;
+    const redirectUri = `${window.location.origin}/api/freelancer/callback`;
     const scope = 'basic'; // Adjust scopes as needed
     
     const freelancerAuthUrl = `https://accounts.freelancer.com/oauth/authorize?` +
@@ -51,7 +51,7 @@ export default function AuthPage() {
 
   const handleDisconnect = async () => {
     try {
-      await fetch('/api/auth/disconnect', { method: 'POST' });
+      await fetch('/api/freelancer/disconnect', { method: 'POST' });
       setIsAuthenticated(false);
     } catch (error) {
       console.error('Failed to disconnect:', error);
