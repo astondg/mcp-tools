@@ -32,10 +32,26 @@ function LoginForm() {
         body: JSON.stringify(body),
       });
 
-      const data = await response.json();
+      // Handle response safely - Safari can throw SyntaxError if body isn't valid JSON
+      let data;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const text = await response.text();
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch {
+            data = {};
+          }
+        } else {
+          data = {};
+        }
+      } else {
+        data = {};
+      }
 
       if (!response.ok) {
-        throw new Error(data.message || 'Authentication failed');
+        throw new Error(data.message || data.error || 'Authentication failed');
       }
 
       // On success, redirect back to the OAuth flow or home
