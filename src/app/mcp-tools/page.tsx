@@ -9,26 +9,178 @@ export default function McpToolsPage() {
           A collection of useful tools accessible via the Model Context Protocol
         </p>
         
+        {/* Shopping & Deal Intelligence Section */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 mb-8">
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
-            Available Tools
+            Shopping Intelligence & Deal Tracking
           </h2>
-          <div className="grid md:grid-cols-1 gap-6 max-w-2xl mx-auto">
+          <p className="text-gray-600 dark:text-gray-400 text-sm mb-6">
+            Build your purchase history, create wishlists, and get personalized deal recommendations from OzBargain based on your shopping patterns.
+          </p>
+          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
             <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
               <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                🛒 Get OzBargain Deals
+                🔥 ozbargain_get_deals
               </h3>
               <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
-                Fetch and parse the latest deals from OzBargain RSS feed with detailed information including title, description, categories, and thumbnail images
+                Fetch latest deals with enhanced parsing (price, store, categories)
               </p>
               <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
-                <div><strong>Parameters:</strong></div>
-                <div>• limit: Number of deals to return 1-50 (default: 10)</div>
-              </div>
-              <div className="mt-3 px-3 py-2 bg-green-50 dark:bg-green-900/20 rounded text-xs text-green-700 dark:text-green-300">
-                ✅ Live RSS feed integration with OzBargain.com.au
+                <div>• limit: Number of deals (1-50)</div>
               </div>
             </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                🔍 ozbargain_search_deals
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Search deals by keyword with price and category filters
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• keywords, maxPrice, category</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                🎯 shopping_find_matching_deals
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                AI-powered deal matching based on your wishlist and purchase history
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• Scores deals by relevance</div>
+                <div>• Matches wishlist items</div>
+                <div>• Learns from purchase patterns</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                📂 shopping_manage_category
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Create/update/delete purchase categories with hierarchy
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• action: add, update, delete</div>
+                <div>• Supports parent/child categories</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                🛍️ shopping_add_purchase
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Record past purchases to build your shopping profile
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• itemName, category, price, date</div>
+                <div>• merchant, brand, quantity, URL</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                📥 shopping_import_purchases
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Bulk import purchase history from CSV
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• csvData with column mappings</div>
+                <div>• Auto-creates categories</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                📦 shopping_get_purchases
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Query purchase history with flexible filters
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• Filter by category, merchant, brand</div>
+                <div>• Date range and price filters</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                🎁 shopping_add_wishlist
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Add items to wishlist for deal tracking
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• itemName, category, targetPrice</div>
+                <div>• Priority levels: LOW to URGENT</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                📝 shopping_get_wishlist
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                View wishlist with priority-based sorting
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• Filter by category/priority</div>
+                <div>• Shows target prices</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                ✏️ shopping_update_wishlist
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Update, mark inactive, or delete wishlist items
+              </p>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                📊 shopping_get_profile
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                View shopping insights and spending patterns
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• Top categories by spending</div>
+                <div>• Frequent merchants & brands</div>
+                <div>• Purchase statistics</div>
+              </div>
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                ⚙️ shopping_update_profile
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">
+                Configure shopping preferences
+              </p>
+              <div className="text-xs text-gray-500 dark:text-gray-500 space-y-1">
+                <div>• Preferred/avoided merchants</div>
+                <div>• Preferred brands</div>
+                <div>• Deal vote minimum</div>
+              </div>
+            </div>
+          </div>
+          <div className="mt-6 px-3 py-2 bg-purple-50 dark:bg-purple-900/20 rounded text-xs text-purple-700 dark:text-purple-300 max-w-2xl mx-auto">
+            Personalized deal discovery powered by your purchase history and wishlist.
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 mb-8">
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
+            Freelancer Integration
+          </h2>
+          <div className="grid md:grid-cols-1 gap-6 max-w-2xl mx-auto">
 
             <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
               <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
