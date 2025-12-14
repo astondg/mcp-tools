@@ -290,11 +290,12 @@ model OauthApplication {
   metadata     String?
   clientId     String   @unique @map("client_id")
   clientSecret String   @map("client_secret")
-  redirectURLs String   @map("redirect_urls") // JSON array stored as string
+  redirectUrls String   @map("redirect_urls") // JSON array stored as string
   type         String   @default("web")
   disabled     Boolean  @default(false)
   userId       String?  @map("user_id")
   createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   // Relations
   accessTokens OauthAccessToken[]
