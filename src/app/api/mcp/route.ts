@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createMcpHandler } from '@vercel/mcp-adapter';
 import { TokenStorage } from '@/lib/redis';
-import { auth } from '@/lib/auth';
+import { prisma } from '@/lib/db';
 import {
   createVehicle,
   updateVehicle,
@@ -2788,6 +2788,8 @@ const handler = createMcpHandler(
 
 // Wrap handler with MCP authentication
 async function authenticatedHandler(req: Request) {
+  const baseUrl = process.env.BETTER_AUTH_URL || 'http://localhost:3000';
+
   // Extract bearer token from Authorization header
   const authHeader = req.headers.get('authorization');
 
@@ -2796,7 +2798,7 @@ async function authenticatedHandler(req: Request) {
       status: 401,
       headers: {
         'Content-Type': 'application/json',
-        'WWW-Authenticate': 'Bearer realm="MCP Tools"',
+        'WWW-Authenticate': `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
       },
     });
   }
@@ -2804,17 +2806,28 @@ async function authenticatedHandler(req: Request) {
   const token = authHeader.substring(7); // Remove "Bearer " prefix
 
   try {
-    // Validate the session using Better Auth's getSession
-    const session = await auth.api.getSession({
-      headers: req.headers,
+    // Validate the OAuth access token against the database
+    const accessToken = await prisma.oauthAccessToken.findUnique({
+      where: { accessToken: token },
     });
 
-    if (!session) {
-      return new Response(JSON.stringify({ error: 'Unauthorized - Invalid session' }), {
+    if (!accessToken) {
+      return new Response(JSON.stringify({ error: 'Unauthorized - Invalid token' }), {
         status: 401,
         headers: {
           'Content-Type': 'application/json',
-          'WWW-Authenticate': 'Bearer realm="MCP Tools"',
+          'WWW-Authenticate': `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
+        },
+      });
+    }
+
+    // Check if token is expired
+    if (accessToken.accessTokenExpiresAt < new Date()) {
+      return new Response(JSON.stringify({ error: 'Unauthorized - Token expired' }), {
+        status: 401,
+        headers: {
+          'Content-Type': 'application/json',
+          'WWW-Authenticate': `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
         },
       });
     }
@@ -2827,7 +2840,7 @@ async function authenticatedHandler(req: Request) {
       status: 401,
       headers: {
         'Content-Type': 'application/json',
-        'WWW-Authenticate': 'Bearer realm="MCP Tools"',
+        'WWW-Authenticate': `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
       },
     });
   }
