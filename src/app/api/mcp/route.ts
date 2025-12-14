@@ -596,14 +596,14 @@ const handler = createMcpHandler(
           const merchantNames = [...new Set(purchaseCategories.map(p => p.merchant?.toLowerCase()).filter(Boolean) as string[])];
 
           // Preferred/avoided from profile
-          const preferredMerchants = profile?.preferredMerchants ? JSON.parse(profile.preferredMerchants).map((m: string) => m.toLowerCase()) : [];
-          const avoidedMerchants = profile?.avoidedMerchants ? JSON.parse(profile.avoidedMerchants).map((m: string) => m.toLowerCase()) : [];
-          const preferredBrands = profile?.preferredBrands ? JSON.parse(profile.preferredBrands).map((b: string) => b.toLowerCase()) : [];
+          const preferredMerchants: string[] = profile?.preferredMerchants ? JSON.parse(profile.preferredMerchants).map((m: string) => m.toLowerCase()) : [];
+          const avoidedMerchants: string[] = profile?.avoidedMerchants ? JSON.parse(profile.avoidedMerchants).map((m: string) => m.toLowerCase()) : [];
+          const preferredBrands: string[] = profile?.preferredBrands ? JSON.parse(profile.preferredBrands).map((b: string) => b.toLowerCase()) : [];
 
           // Score and filter deals
           const scoredDeals = deals.map(deal => {
             let score = 0;
-            const reasons = [];
+            const reasons: string[] = [];
             const dealTitle = deal.title.toLowerCase();
             const dealDesc = deal.description.toLowerCase();
             const dealStore = deal.store?.toLowerCase() || '';
