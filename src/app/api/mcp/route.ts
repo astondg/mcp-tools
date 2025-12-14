@@ -3451,7 +3451,7 @@ const handler = createMcpHandler(
     // Import purchases from CSV
     server.tool(
       'shopping_import_purchases',
-      'Bulk import purchase history from CSV data',
+      'Bulk import purchase history from CSV data. Handles quoted fields with commas, skips duplicates.',
       {
         csvData: z.string().min(1).describe('CSV data with headers'),
         dateColumn: z.string().describe('Column name for purchase date'),
@@ -3464,10 +3464,39 @@ const handler = createMcpHandler(
       },
       async (params) => {
         try {
+          // Parse CSV properly handling quoted fields with commas
+          function parseCSVLine(line: string): string[] {
+            const result: string[] = [];
+            let current = '';
+            let inQuotes = false;
+
+            for (let i = 0; i < line.length; i++) {
+              const char = line[i];
+              const nextChar = line[i + 1];
+
+              if (char === '"' && inQuotes && nextChar === '"') {
+                // Escaped quote inside quoted field
+                current += '"';
+                i++; // Skip next quote
+              } else if (char === '"') {
+                // Toggle quote mode
+                inQuotes = !inQuotes;
+              } else if (char === ',' && !inQuotes) {
+                // Field separator
+                result.push(current.trim());
+                current = '';
+              } else {
+                current += char;
+              }
+            }
+            result.push(current.trim());
+            return result;
+          }
+
           const lines = params.csvData.trim().split('\n');
           if (lines.length < 2) throw new Error('CSV must have headers and at least one data row');
 
-          const headers = lines[0].split(',').map(h => h.trim());
+          const headers = parseCSVLine(lines[0]);
           const dateIdx = headers.indexOf(params.dateColumn);
           const itemIdx = headers.indexOf(params.itemColumn);
           const priceIdx = headers.indexOf(params.priceColumn);
@@ -3476,65 +3505,127 @@ const handler = createMcpHandler(
           const brandIdx = params.brandColumn ? headers.indexOf(params.brandColumn) : -1;
 
           if (dateIdx === -1 || itemIdx === -1 || priceIdx === -1) {
-            throw new Error('Required columns not found in CSV headers');
+            throw new Error(`Required columns not found. Headers: ${headers.join(', ')}`);
           }
 
-          const imported = [];
-          const errors = [];
+          // Parse all rows first
+          const parsedRows: Array<{
+            date: Date;
+            itemName: string;
+            price: number;
+            categoryName: string;
+            merchant?: string;
+            brand?: string;
+            rowNum: number;
+          }> = [];
+          const parseErrors: string[] = [];
 
           for (let i = 1; i < lines.length; i++) {
-            const cols = lines[i].split(',').map(c => c.trim());
+            if (!lines[i].trim()) continue; // Skip empty lines
 
             try {
-              const categoryName = categoryIdx >= 0 ? cols[categoryIdx] : params.defaultCategory;
+              const cols = parseCSVLine(lines[i]);
+              const categoryName = (categoryIdx >= 0 ? cols[categoryIdx] : params.defaultCategory) || '';
               if (!categoryName) throw new Error('Category required');
 
-              const category = await prisma.purchaseCategory.findUnique({
-                where: { name: categoryName }
+              const dateStr = cols[dateIdx];
+              const parsedDate = new Date(dateStr);
+              if (isNaN(parsedDate.getTime())) throw new Error(`Invalid date: ${dateStr}`);
+
+              const priceStr = cols[priceIdx];
+              const price = parseFloat(priceStr.replace(/[^0-9.-]/g, ''));
+              if (isNaN(price)) throw new Error(`Invalid price: ${priceStr}`);
+
+              parsedRows.push({
+                date: parsedDate,
+                itemName: cols[itemIdx],
+                price,
+                categoryName,
+                merchant: merchantIdx >= 0 && cols[merchantIdx] ? cols[merchantIdx] : undefined,
+                brand: brandIdx >= 0 && cols[brandIdx] ? cols[brandIdx] : undefined,
+                rowNum: i + 1,
               });
-
-              if (!category) {
-                // Auto-create category
-                const newCat = await prisma.purchaseCategory.create({
-                  data: { name: categoryName }
-                });
-
-                await prisma.purchaseHistory.create({
-                  data: {
-                    purchaseDate: new Date(cols[dateIdx]),
-                    itemName: cols[itemIdx],
-                    price: parseFloat(cols[priceIdx].replace(/[^0-9.-]/g, '')),
-                    categoryId: newCat.id,
-                    merchant: merchantIdx >= 0 ? cols[merchantIdx] : undefined,
-                    brand: brandIdx >= 0 ? cols[brandIdx] : undefined,
-                  }
-                });
-              } else {
-                await prisma.purchaseHistory.create({
-                  data: {
-                    purchaseDate: new Date(cols[dateIdx]),
-                    itemName: cols[itemIdx],
-                    price: parseFloat(cols[priceIdx].replace(/[^0-9.-]/g, '')),
-                    categoryId: category.id,
-                    merchant: merchantIdx >= 0 ? cols[merchantIdx] : undefined,
-                    brand: brandIdx >= 0 ? cols[brandIdx] : undefined,
-                  }
-                });
-              }
-
-              imported.push(cols[itemIdx]);
             } catch (err) {
-              errors.push(`Row ${i + 1}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+              parseErrors.push(`Row ${i + 1}: ${err instanceof Error ? err.message : 'Parse error'}`);
             }
           }
 
+          if (parsedRows.length === 0) {
+            throw new Error('No valid rows to import');
+          }
+
+          // Get unique category names and ensure they exist
+          const uniqueCategories = [...new Set(parsedRows.map(r => r.categoryName))];
+          const categoryMap = new Map<string, string>();
+
+          for (const catName of uniqueCategories) {
+            let category = await prisma.purchaseCategory.findUnique({
+              where: { name: catName }
+            });
+            if (!category) {
+              category = await prisma.purchaseCategory.create({
+                data: { name: catName }
+              });
+            }
+            categoryMap.set(catName, category.id);
+          }
+
+          // Check for duplicates (same date, item, price)
+          const existingPurchases = await prisma.purchaseHistory.findMany({
+            where: {
+              OR: parsedRows.map(r => ({
+                purchaseDate: r.date,
+                itemName: r.itemName,
+                price: r.price,
+              }))
+            },
+            select: { purchaseDate: true, itemName: true, price: true }
+          });
+
+          const existingSet = new Set(
+            existingPurchases.map(p =>
+              `${p.purchaseDate.toISOString()}|${p.itemName}|${p.price}`
+            )
+          );
+
+          // Filter out duplicates
+          const newRows = parsedRows.filter(r => {
+            const key = `${r.date.toISOString()}|${r.itemName}|${r.price}`;
+            return !existingSet.has(key);
+          });
+          const skippedCount = parsedRows.length - newRows.length;
+
+          // Batch insert new records
+          let importedCount = 0;
+          if (newRows.length > 0) {
+            const result = await prisma.purchaseHistory.createMany({
+              data: newRows.map(r => ({
+                purchaseDate: r.date,
+                itemName: r.itemName,
+                price: r.price,
+                categoryId: categoryMap.get(r.categoryName)!,
+                merchant: r.merchant,
+                brand: r.brand,
+              })),
+              skipDuplicates: true,
+            });
+            importedCount = result.count;
+          }
+
+          const summary = [
+            `✅ Import complete!`,
+            ``,
+            `• Imported: ${importedCount} purchases`,
+            skippedCount > 0 ? `• Skipped (duplicates): ${skippedCount}` : null,
+            parseErrors.length > 0 ? `• Parse errors: ${parseErrors.length}` : null,
+          ].filter(Boolean).join('\n');
+
+          const errorDetails = parseErrors.length > 0
+            ? `\n\nParse errors:\n${parseErrors.slice(0, 10).join('\n')}${parseErrors.length > 10 ? `\n...and ${parseErrors.length - 10} more` : ''}`
+            : '';
+
           return {
-            content: [{
-              type: 'text',
-              text: `✅ Import complete!\n\n` +
-                    `• Imported: ${imported.length} purchases\n` +
-                    (errors.length > 0 ? `• Errors: ${errors.length}\n\n${errors.join('\n')}` : '')
-            }]
+            content: [{ type: 'text', text: summary + errorDetails }]
           };
         } catch (error) {
           console.error('Error in shopping_import_purchases:', error);
