@@ -18,6 +18,11 @@ export const auth = betterAuth({
   plugins: [
     mcp({
       loginPage: '/mcp-login', // Path to the MCP login page
+      oidcConfig: {
+        loginPage: '/mcp-login',
+        accessTokenExpiresIn: 60 * 60 * 24, // 24 hours
+        refreshTokenExpiresIn: 60 * 60 * 24 * 30, // 30 days
+      },
     }),
   ],
 
