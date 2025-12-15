@@ -3714,6 +3714,244 @@ const handler = createMcpHandler(
       }
     );
 
+    // Update single purchase
+    server.tool(
+      'shopping_update_purchase',
+      'Update a single purchase record by ID',
+      {
+        id: z.string().uuid().describe('Purchase ID to update'),
+        itemName: z.string().min(1).optional().describe('New item name'),
+        categoryName: z.string().min(1).optional().describe('New category name'),
+        price: z.number().positive().optional().describe('New price'),
+        purchaseDate: z.string().optional().describe('New purchase date (YYYY-MM-DD)'),
+        quantity: z.number().int().positive().optional().describe('New quantity'),
+        merchant: z.string().optional().describe('New merchant (empty string to clear)'),
+        brand: z.string().optional().describe('New brand (empty string to clear)'),
+        notes: z.string().optional().describe('New notes (empty string to clear)'),
+      },
+      async (params) => {
+        try {
+          // Verify purchase exists
+          const existing = await prisma.purchaseHistory.findUnique({
+            where: { id: params.id },
+            include: { category: true }
+          });
+
+          if (!existing) {
+            return {
+              content: [{ type: 'text', text: `❌ Purchase with ID "${params.id}" not found.` }]
+            };
+          }
+
+          const updateData: any = {};
+
+          if (params.itemName !== undefined) updateData.itemName = params.itemName;
+          if (params.price !== undefined) updateData.price = params.price;
+          if (params.purchaseDate !== undefined) updateData.purchaseDate = new Date(params.purchaseDate);
+          if (params.quantity !== undefined) updateData.quantity = params.quantity;
+          if (params.merchant !== undefined) updateData.merchant = params.merchant || null;
+          if (params.brand !== undefined) updateData.brand = params.brand || null;
+          if (params.notes !== undefined) updateData.notes = params.notes || null;
+
+          if (params.categoryName !== undefined) {
+            const category = await prisma.purchaseCategory.findUnique({
+              where: { name: params.categoryName }
+            });
+            if (!category) {
+              return {
+                content: [{ type: 'text', text: `❌ Category "${params.categoryName}" not found. Create it first with shopping_manage_category.` }]
+              };
+            }
+            updateData.categoryId = category.id;
+          }
+
+          if (Object.keys(updateData).length === 0) {
+            return {
+              content: [{ type: 'text', text: '⚠️ No fields provided to update.' }]
+            };
+          }
+
+          const updated = await prisma.purchaseHistory.update({
+            where: { id: params.id },
+            data: updateData,
+            include: { category: true }
+          });
+
+          return {
+            content: [{
+              type: 'text',
+              text: `✅ Purchase updated:\n\n` +
+                    `• ${updated.itemName} (${updated.quantity}x)\n` +
+                    `• $${updated.price}\n` +
+                    `• Category: ${updated.category.name}\n` +
+                    `• Date: ${updated.purchaseDate.toISOString().split('T')[0]}` +
+                    (updated.merchant ? `\n• Merchant: ${updated.merchant}` : '') +
+                    (updated.brand ? `\n• Brand: ${updated.brand}` : '') +
+                    (updated.notes ? `\n• Notes: ${updated.notes}` : '')
+            }]
+          };
+        } catch (error) {
+          console.error('Error in shopping_update_purchase:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
+    // Bulk update purchases
+    server.tool(
+      'shopping_bulk_update_purchases',
+      'Update multiple purchase records matching filter criteria. Use to recategorize, update merchant/brand, or correct data in bulk.',
+      {
+        // Filter criteria (at least one required)
+        filterCategoryName: z.string().optional().describe('Filter: match purchases in this category'),
+        filterMerchant: z.string().optional().describe('Filter: match purchases from this merchant (partial match)'),
+        filterBrand: z.string().optional().describe('Filter: match purchases of this brand (partial match)'),
+        filterStartDate: z.string().optional().describe('Filter: purchases on or after this date (YYYY-MM-DD)'),
+        filterEndDate: z.string().optional().describe('Filter: purchases on or before this date (YYYY-MM-DD)'),
+        filterMinPrice: z.number().optional().describe('Filter: minimum price'),
+        filterMaxPrice: z.number().optional().describe('Filter: maximum price'),
+        filterItemNameContains: z.string().optional().describe('Filter: item name contains this text (partial match)'),
+        // Update fields
+        newCategoryName: z.string().optional().describe('Update: set category to this'),
+        newMerchant: z.string().optional().describe('Update: set merchant (empty string to clear)'),
+        newBrand: z.string().optional().describe('Update: set brand (empty string to clear)'),
+        // Safety
+        dryRun: z.boolean().default(true).describe('Preview changes without applying (default: true)'),
+      },
+      async (params) => {
+        try {
+          // Build filter
+          const where: any = {};
+
+          if (params.filterCategoryName) {
+            const category = await prisma.purchaseCategory.findUnique({
+              where: { name: params.filterCategoryName }
+            });
+            if (category) where.categoryId = category.id;
+            else {
+              return {
+                content: [{ type: 'text', text: `❌ Filter category "${params.filterCategoryName}" not found.` }]
+              };
+            }
+          }
+
+          if (params.filterMerchant) where.merchant = { contains: params.filterMerchant, mode: 'insensitive' };
+          if (params.filterBrand) where.brand = { contains: params.filterBrand, mode: 'insensitive' };
+          if (params.filterItemNameContains) where.itemName = { contains: params.filterItemNameContains, mode: 'insensitive' };
+
+          if (params.filterStartDate || params.filterEndDate) {
+            where.purchaseDate = {};
+            if (params.filterStartDate) where.purchaseDate.gte = new Date(params.filterStartDate);
+            if (params.filterEndDate) where.purchaseDate.lte = new Date(params.filterEndDate);
+          }
+
+          if (params.filterMinPrice || params.filterMaxPrice) {
+            where.price = {};
+            if (params.filterMinPrice) where.price.gte = params.filterMinPrice;
+            if (params.filterMaxPrice) where.price.lte = params.filterMaxPrice;
+          }
+
+          // Ensure at least one filter is set
+          if (Object.keys(where).length === 0) {
+            return {
+              content: [{ type: 'text', text: '❌ At least one filter criteria is required to prevent accidental bulk updates.' }]
+            };
+          }
+
+          // Build update data
+          const updateData: any = {};
+
+          if (params.newCategoryName !== undefined) {
+            const category = await prisma.purchaseCategory.findUnique({
+              where: { name: params.newCategoryName }
+            });
+            if (!category) {
+              return {
+                content: [{ type: 'text', text: `❌ Target category "${params.newCategoryName}" not found. Create it first with shopping_manage_category.` }]
+              };
+            }
+            updateData.categoryId = category.id;
+          }
+
+          if (params.newMerchant !== undefined) updateData.merchant = params.newMerchant || null;
+          if (params.newBrand !== undefined) updateData.brand = params.newBrand || null;
+
+          if (Object.keys(updateData).length === 0) {
+            return {
+              content: [{ type: 'text', text: '❌ At least one update field (newCategoryName, newMerchant, newBrand) is required.' }]
+            };
+          }
+
+          // Find matching records
+          const matches = await prisma.purchaseHistory.findMany({
+            where,
+            include: { category: true },
+            orderBy: { purchaseDate: 'desc' },
+            take: 100 // Limit preview
+          });
+
+          const totalCount = await prisma.purchaseHistory.count({ where });
+
+          if (totalCount === 0) {
+            return {
+              content: [{ type: 'text', text: '📦 No purchases found matching the filter criteria.' }]
+            };
+          }
+
+          // Build preview
+          const preview = matches.slice(0, 10).map(p =>
+            `• ${p.itemName} - $${p.price} | ${p.purchaseDate.toISOString().split('T')[0]} | ${p.category.name}` +
+            (p.merchant ? ` | ${p.merchant}` : '') +
+            (p.brand ? ` | ${p.brand}` : '')
+          ).join('\n');
+
+          const updateSummary = Object.entries(updateData)
+            .map(([key, value]) => {
+              if (key === 'categoryId' && params.newCategoryName) return `Category → ${params.newCategoryName}`;
+              if (key === 'merchant') return `Merchant → ${value || '(clear)'}`;
+              if (key === 'brand') return `Brand → ${value || '(clear)'}`;
+              return `${key} → ${value}`;
+            })
+            .join(', ');
+
+          if (params.dryRun) {
+            return {
+              content: [{
+                type: 'text',
+                text: `🔍 DRY RUN - Preview of bulk update:\n\n` +
+                      `📊 Matching records: ${totalCount}\n` +
+                      `✏️ Changes: ${updateSummary}\n\n` +
+                      `Sample of affected records${totalCount > 10 ? ` (showing 10 of ${totalCount})` : ''}:\n${preview}\n\n` +
+                      `⚠️ To apply these changes, run again with dryRun: false`
+              }]
+            };
+          }
+
+          // Apply update
+          const result = await prisma.purchaseHistory.updateMany({
+            where,
+            data: updateData
+          });
+
+          return {
+            content: [{
+              type: 'text',
+              text: `✅ Bulk update complete!\n\n` +
+                    `📊 Records updated: ${result.count}\n` +
+                    `✏️ Changes applied: ${updateSummary}`
+            }]
+          };
+        } catch (error) {
+          console.error('Error in shopping_bulk_update_purchases:', error);
+          return {
+            content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+          };
+        }
+      }
+    );
+
     // Add wishlist item
     server.tool(
       'shopping_add_wishlist',
