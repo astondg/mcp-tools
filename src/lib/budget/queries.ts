@@ -639,6 +639,21 @@ export async function importExpenses(data: {
   });
   const categoryByName = new Map(allCategories.map((c) => [c.name.toLowerCase(), c]));
 
+  // Get or create "Uncategorized" category as fallback for transactions without matching rules
+  let uncategorizedCategory = categoryByName.get('uncategorized');
+  if (!uncategorizedCategory) {
+    const created = await prisma.budgetCategory.create({
+      data: {
+        name: 'Uncategorized',
+        period: 'MONTHLY',
+        budgetAmount: 0,
+      },
+      select: { id: true, name: true },
+    });
+    uncategorizedCategory = created;
+    categoryByName.set('uncategorized', created);
+  }
+
   // Batch check for existing bank references
   const bankReferences = parsedRows.map((r) => r.bankReference);
   const existingExpenses = await prisma.expense.findMany({
@@ -702,33 +717,35 @@ export async function importExpenses(data: {
       }
     }
 
-    // If categorized, add to create list; otherwise add to uncategorized
-    if (categoryId) {
-      expensesToCreate.push({
-        date: row.date,
-        amount: row.amount,
-        categoryId,
-        description: row.description,
-        source: 'BANK_IMPORT',
-        bankReference: row.bankReference,
-      });
-      batchRefs.add(row.bankReference);
-    } else {
+    // If no category found, use the Uncategorized fallback and track it
+    if (!categoryId) {
+      categoryId = uncategorizedCategory.id;
       result.uncategorized.push({
         description: row.description,
         amount: row.amount,
         date: row.dateStr,
       });
-      batchRefs.add(row.bankReference);
     }
+
+    // Add to create list (all expenses now get inserted, including uncategorized)
+    expensesToCreate.push({
+      date: row.date,
+      amount: row.amount,
+      categoryId,
+      description: row.description,
+      source: 'BANK_IMPORT',
+      bankReference: row.bankReference,
+    });
+    batchRefs.add(row.bankReference);
   }
 
-  // Bulk insert all categorized expenses
+  // Bulk insert all expenses
   if (expensesToCreate.length > 0) {
-    await prisma.expense.createMany({
+    const createResult = await prisma.expense.createMany({
       data: expensesToCreate,
+      skipDuplicates: true,
     });
-    result.imported = expensesToCreate.length;
+    result.imported = createResult.count;
   }
 
   return result;
