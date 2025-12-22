@@ -568,7 +568,7 @@ export async function importExpenses(data: {
     let inQuotes = false;
 
     for (const char of line) {
-      if (char === '"' || char === "'") {
+      if (char === '"') {
         inQuotes = !inQuotes;
       } else if (char === ',' && !inQuotes) {
         values.push(current.trim());
