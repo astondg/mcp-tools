@@ -143,6 +143,7 @@ model BudgetCategory {
   children BudgetCategory[]     @relation("CategoryHierarchy")
   expenses Expense[]
   rules    CategorizationRule[]
+  scenarioOverrides ScenarioCategoryOverride[]
 
   @@map("budget_categories")
 }
@@ -192,6 +193,7 @@ model IncomeSource {
 
   // Relations
   incomes Income[]
+  scenarioOverrides ScenarioIncomeOverride[]
 
   @@map("income_sources")
 }
@@ -306,6 +308,286 @@ model ShoppingProfile {
   updatedAt             DateTime @updatedAt @map("updated_at")
 
   @@map("shopping_profiles")
+}
+
+// ==========================================
+// Fitness & Health Tracking System
+// ==========================================
+
+enum GoalType {
+  WEIGHT           // Body weight targets
+  BODY_FAT         // Body fat percentage targets
+  STRENGTH         // Strength benchmarks (e.g., squat 100kg)
+  RUNNING_PACE     // Target paces for distances
+  RUNNING_DISTANCE // Distance goals (e.g., run 10km)
+  RACE_TIME        // Race completion time targets
+  VO2MAX           // Estimated VO2max targets
+  RESTING_HR       // Resting heart rate targets
+  CUSTOM           // User-defined goals
+}
+
+enum GoalDirection {
+  INCREASE         // Goal is to go up (e.g., lift more)
+  DECREASE         // Goal is to go down (e.g., lose weight)
+  MAINTAIN         // Goal is to maintain current level
+}
+
+enum ProgramPhase {
+  BASE             // Foundation/building phase
+  BUILD            // Intensification phase
+  PEAK             // Maximum performance phase
+  TAPER            // Pre-event/recovery phase
+  RECOVERY         // Active recovery phase
+  TRANSITION       // Between phases/programs
+}
+
+enum SessionType {
+  STRENGTH         // Weight training
+  RUNNING          // Running/jogging
+  CARDIO           // General cardio (cycling, rowing, etc.)
+  HIIT             // High intensity interval training
+  FLEXIBILITY      // Stretching/yoga
+  REST             // Active rest day
+  CROSS_TRAINING   // Alternative activities
+}
+
+enum MeasurementSource {
+  MANUAL           // User entered
+  APPLE_HEALTH     // From Apple Health
+  APP_SCREENSHOT   // Extracted from screenshot
+}
+
+model FitnessGoal {
+  id              String         @id @default(uuid())
+  name            String         // "Lose 10kg", "Squat 100kg"
+  goalType        GoalType       @map("goal_type")
+  direction       GoalDirection  @default(DECREASE)
+  targetValue     Decimal        @map("target_value") @db.Decimal(10, 2)
+  targetUnit      String         @map("target_unit") // kg, %, min, km, bpm
+  startValue      Decimal?       @map("start_value") @db.Decimal(10, 2)
+  currentValue    Decimal?       @map("current_value") @db.Decimal(10, 2)
+  startDate       DateTime       @map("start_date") @db.Date
+  targetDate      DateTime?      @map("target_date") @db.Date
+  isCompleted     Boolean        @default(false) @map("is_completed")
+  completedAt     DateTime?      @map("completed_at")
+  notes           String?
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  progressLogs    GoalProgressLog[]
+
+  @@index([goalType])
+  @@index([isCompleted])
+  @@map("fitness_goals")
+}
+
+model GoalProgressLog {
+  id              String            @id @default(uuid())
+  goalId          String            @map("goal_id")
+  logDate         DateTime          @map("log_date") @db.Date
+  value           Decimal           @db.Decimal(10, 2)
+  source          MeasurementSource @default(MANUAL)
+  notes           String?
+  createdAt       DateTime          @default(now()) @map("created_at")
+
+  // Relations
+  goal            FitnessGoal       @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@index([goalId, logDate])
+  @@map("goal_progress_logs")
+}
+
+model TrainingProgram {
+  id              String         @id @default(uuid())
+  name            String         // "12-week Half Marathon", "Strength Phase 1"
+  description     String?
+  startDate       DateTime?      @map("start_date") @db.Date
+  endDate         DateTime?      @map("end_date") @db.Date
+  isActive        Boolean        @default(false) @map("is_active")
+  notes           String?
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  phases          ProgramPhaseBlock[]
+
+  @@index([isActive])
+  @@map("training_programs")
+}
+
+model ProgramPhaseBlock {
+  id              String         @id @default(uuid())
+  programId       String         @map("program_id")
+  name            String         // "Week 1-4: Base Building"
+  phaseType       ProgramPhase   @map("phase_type")
+  weekNumber      Int            @map("week_number") // Starting week number
+  durationWeeks   Int            @default(1) @map("duration_weeks")
+  sortOrder       Int            @default(0) @map("sort_order")
+  focusAreas      String?        @map("focus_areas") // JSON array of focus areas
+  notes           String?
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  // Relations
+  program         TrainingProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  sessionTemplates SessionTemplate[]
+
+  @@index([programId])
+  @@map("program_phase_blocks")
+}
+
+model SessionTemplate {
+  id              String         @id @default(uuid())
+  phaseBlockId    String         @map("phase_block_id")
+  dayOfWeek       Int            @map("day_of_week") // 1=Monday, 7=Sunday
+  sessionType     SessionType    @map("session_type")
+  name            String         // "Morning Run", "Upper Body Strength"
+  description     String?
+  targetDuration  Int?           @map("target_duration") // Minutes
+  targetDistance  Decimal?       @map("target_distance") @db.Decimal(10, 2) // For runs (km)
+  targetIntensity String?        @map("target_intensity") // "Zone 2", "RPE 7", etc.
+  notes           String?
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  // Relations
+  phaseBlock      ProgramPhaseBlock @relation(fields: [phaseBlockId], references: [id], onDelete: Cascade)
+
+  @@index([phaseBlockId])
+  @@map("session_templates")
+}
+
+model NutritionDay {
+  id              String            @id @default(uuid())
+  date            DateTime          @unique @db.Date
+  caloriesBudget  Int?              @map("calories_budget")
+  caloriesActual  Int?              @map("calories_actual")
+  proteinBudget   Int?              @map("protein_budget") // grams
+  proteinActual   Int?              @map("protein_actual")
+  carbsBudget     Int?              @map("carbs_budget")
+  carbsActual     Int?              @map("carbs_actual")
+  fatBudget       Int?              @map("fat_budget")
+  fatActual       Int?              @map("fat_actual")
+  source          MeasurementSource @default(MANUAL)
+  notes           String?
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  @@index([date])
+  @@map("nutrition_days")
+}
+
+model WorkoutLog {
+  id              String            @id @default(uuid())
+  logDate         DateTime          @map("log_date") @db.Date
+  sessionType     SessionType       @map("session_type")
+  name            String?           // "Gym Book: Upper Body", "Fitness+ 30min HIIT"
+  durationMinutes Int?              @map("duration_minutes")
+  distanceKm      Decimal?          @map("distance_km") @db.Decimal(10, 2)
+  avgPaceMinKm    Decimal?          @map("avg_pace_min_km") @db.Decimal(10, 2) // For runs
+  caloriesBurned  Int?              @map("calories_burned")
+  avgHeartRate    Int?              @map("avg_heart_rate")
+  maxHeartRate    Int?              @map("max_heart_rate")
+  rpe             Int?              // Rating of Perceived Exertion (1-10)
+  source          MeasurementSource @default(MANUAL)
+  notes           String?
+  createdAt       DateTime          @default(now()) @map("created_at")
+
+  // Relations
+  strengthPRs     StrengthPR[]
+
+  @@index([logDate])
+  @@index([sessionType])
+  @@map("workout_logs")
+}
+
+model StrengthPR {
+  id              String         @id @default(uuid())
+  workoutLogId    String?        @map("workout_log_id")
+  exercise        String         // "Squat", "Bench Press", "Deadlift"
+  prDate          DateTime       @map("pr_date") @db.Date
+  weightKg        Decimal        @map("weight_kg") @db.Decimal(10, 2)
+  reps            Int            @default(1)
+  oneRepMaxEst    Decimal?       @map("one_rep_max_est") @db.Decimal(10, 2) // Calculated
+  notes           String?
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  // Relations
+  workoutLog      WorkoutLog?    @relation(fields: [workoutLogId], references: [id], onDelete: SetNull)
+
+  @@index([exercise])
+  @@index([prDate])
+  @@map("strength_prs")
+}
+
+model BodyMeasurement {
+  id              String            @id @default(uuid())
+  measureDate     DateTime          @unique @map("measure_date") @db.Date
+  weightKg        Decimal?          @map("weight_kg") @db.Decimal(10, 2)
+  bodyFatPercent  Decimal?          @map("body_fat_percent") @db.Decimal(5, 2)
+  muscleMassKg    Decimal?          @map("muscle_mass_kg") @db.Decimal(10, 2)
+  restingHR       Int?              @map("resting_hr") // bpm
+  vo2maxEstimate  Decimal?          @map("vo2max_estimate") @db.Decimal(5, 2)
+  source          MeasurementSource @default(MANUAL)
+  notes           String?
+  createdAt       DateTime          @default(now()) @map("created_at")
+
+  @@index([measureDate])
+  @@map("body_measurements")
+}
+
+// ==========================================
+// Budget Scenario Planning System
+// ==========================================
+
+model BudgetScenario {
+  id              String   @id @default(uuid())
+  name            String   @unique // "House Purchase", "New Job", "Current"
+  description     String?
+  isBaseline      Boolean  @default(false) @map("is_baseline")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  categoryOverrides ScenarioCategoryOverride[]
+  incomeOverrides   ScenarioIncomeOverride[]
+
+  @@index([isBaseline])
+  @@map("budget_scenarios")
+}
+
+model ScenarioCategoryOverride {
+  id              String   @id @default(uuid())
+  scenarioId      String   @map("scenario_id")
+  categoryId      String   @map("category_id")
+  budgetAmount    Decimal  @map("budget_amount") @db.Decimal(10, 2)
+  notes           String?  // "Mortgage payment", "Reduced for savings"
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  scenario        BudgetScenario  @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  category        BudgetCategory  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([scenarioId, categoryId])
+  @@index([scenarioId])
+  @@map("scenario_category_overrides")
+}
+
+model ScenarioIncomeOverride {
+  id              String   @id @default(uuid())
+  scenarioId      String   @map("scenario_id")
+  sourceId        String   @map("source_id")
+  expectedAmount  Decimal  @map("expected_amount") @db.Decimal(10, 2)
+  payDay          Int?     @map("pay_day") // Override pay day if different
+  notes           String?  // "New salary", "Reduced hours"
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  scenario        BudgetScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  source          IncomeSource   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@unique([scenarioId, sourceId])
+  @@index([scenarioId])
+  @@map("scenario_income_overrides")
 }
 
 // ==========================================
