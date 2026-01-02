@@ -27,6 +27,7 @@ import {
   CreateTrainingProgramInput,
   CreateProgramPhaseInput,
   CreateSessionTemplateInput,
+  BulkCreateSessionTemplatesInput,
   UpsertNutritionDayInput,
   CreateWorkoutLogInput,
   CreateStrengthPRInput,
@@ -448,6 +449,48 @@ export async function addSessionTemplate(
   return {
     ...session,
     targetDistance: decimalToNumber(session.targetDistance),
+  };
+}
+
+export async function bulkAddSessionTemplates(
+  input: BulkCreateSessionTemplatesInput
+): Promise<{ count: number; sessions: SessionTemplateResponse[] }> {
+  const { phaseBlockId, sessions } = input;
+
+  // Verify phase block exists
+  const phaseBlock = await prisma.programPhaseBlock.findUnique({
+    where: { id: phaseBlockId },
+  });
+
+  if (!phaseBlock) {
+    throw new Error(`Phase block not found: ${phaseBlockId}`);
+  }
+
+  // Create all sessions in a transaction
+  const createdSessions = await prisma.$transaction(
+    sessions.map((session) =>
+      prisma.sessionTemplate.create({
+        data: {
+          phaseBlockId,
+          dayOfWeek: session.dayOfWeek,
+          sessionType: session.sessionType,
+          name: session.name,
+          description: session.description,
+          targetDuration: session.targetDuration,
+          targetDistance: session.targetDistance,
+          targetIntensity: session.targetIntensity,
+          notes: session.notes,
+        },
+      })
+    )
+  );
+
+  return {
+    count: createdSessions.length,
+    sessions: createdSessions.map((session) => ({
+      ...session,
+      targetDistance: decimalToNumber(session.targetDistance),
+    })),
   };
 }
 

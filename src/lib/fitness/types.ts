@@ -304,6 +304,22 @@ export interface CreateSessionTemplateInput {
   notes?: string;
 }
 
+export interface BulkSessionInput {
+  dayOfWeek: number;
+  sessionType: SessionType;
+  name: string;
+  description?: string;
+  targetDuration?: number;
+  targetDistance?: number;
+  targetIntensity?: string;
+  notes?: string;
+}
+
+export interface BulkCreateSessionTemplatesInput {
+  phaseBlockId: string;
+  sessions: BulkSessionInput[];
+}
+
 export interface UpsertNutritionDayInput {
   date: Date;
   caloriesBudget?: number;
