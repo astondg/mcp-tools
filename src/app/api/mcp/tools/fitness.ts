@@ -15,6 +15,8 @@ import {
   addProgramPhase,
   addSessionTemplate,
   bulkAddSessionTemplates,
+  updateSessionTemplate,
+  deleteSessionTemplate,
   getActiveProgram,
   upsertNutritionDay,
   getNutritionDays,
@@ -573,6 +575,81 @@ export function registerFitnessTools(server: McpServer): void {
         return { content: [{ type: 'text', text: output }] };
       } catch (error) {
         console.error('Error in fitness_program_bulk_add_sessions:', error);
+        return {
+          content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+        };
+      }
+    }
+  );
+
+  // Update session template
+  server.tool(
+    'fitness_program_update_session',
+    'Update an existing session template (change day, type, duration, etc.)',
+    {
+      sessionId: z.string().describe('Session template ID to update'),
+      dayOfWeek: z.number().int().min(1).max(7).optional().describe('New day of week (1=Monday, 7=Sunday)'),
+      sessionType: z.enum(['STRENGTH', 'RUNNING', 'CARDIO', 'HIIT', 'FLEXIBILITY', 'REST', 'CROSS_TRAINING']).optional().describe('New session type'),
+      name: z.string().optional().describe('New session name'),
+      description: z.string().optional().describe('New session description'),
+      targetDuration: z.number().int().optional().describe('New target duration in minutes'),
+      targetDistance: z.number().optional().describe('New target distance in km'),
+      targetIntensity: z.string().optional().describe('New target intensity'),
+      notes: z.string().optional().describe('New session notes'),
+    },
+    async (params) => {
+      try {
+        const session = await updateSessionTemplate(params.sessionId, {
+          dayOfWeek: params.dayOfWeek,
+          sessionType: params.sessionType as SessionType | undefined,
+          name: params.name,
+          description: params.description,
+          targetDuration: params.targetDuration,
+          targetDistance: params.targetDistance,
+          targetIntensity: params.targetIntensity,
+          notes: params.notes,
+        });
+
+        const dayNames = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+        return {
+          content: [{
+            type: 'text',
+            text: `Session updated: ${session.name}\n\n` +
+                  `Day: ${dayNames[session.dayOfWeek]}\n` +
+                  `Type: ${session.sessionType}\n` +
+                  (session.targetDuration ? `Duration: ${session.targetDuration} min\n` : '') +
+                  (session.targetDistance ? `Distance: ${session.targetDistance} km\n` : '') +
+                  (session.targetIntensity ? `Intensity: ${session.targetIntensity}` : '')
+          }]
+        };
+      } catch (error) {
+        console.error('Error in fitness_program_update_session:', error);
+        return {
+          content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+        };
+      }
+    }
+  );
+
+  // Delete session template
+  server.tool(
+    'fitness_program_delete_session',
+    'Delete a session template from a program phase',
+    {
+      sessionId: z.string().describe('Session template ID to delete'),
+      confirm: z.boolean().optional().describe('Set to true to confirm deletion'),
+    },
+    async (params) => {
+      try {
+        if (params.confirm !== true) {
+          return { content: [{ type: 'text', text: 'Please confirm deletion by setting confirm: true' }] };
+        }
+
+        const deleted = await deleteSessionTemplate(params.sessionId);
+        return { content: [{ type: 'text', text: `Deleted session template: ${deleted.name}` }] };
+      } catch (error) {
+        console.error('Error in fitness_program_delete_session:', error);
         return {
           content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]
         };

@@ -304,6 +304,17 @@ export interface CreateSessionTemplateInput {
   notes?: string;
 }
 
+export interface UpdateSessionTemplateInput {
+  dayOfWeek?: number;
+  sessionType?: SessionType;
+  name?: string;
+  description?: string;
+  targetDuration?: number;
+  targetDistance?: number;
+  targetIntensity?: string;
+  notes?: string;
+}
+
 export interface BulkSessionInput {
   dayOfWeek: number;
   sessionType: SessionType;

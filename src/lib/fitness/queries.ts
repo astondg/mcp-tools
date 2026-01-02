@@ -27,6 +27,7 @@ import {
   CreateTrainingProgramInput,
   CreateProgramPhaseInput,
   CreateSessionTemplateInput,
+  UpdateSessionTemplateInput,
   BulkCreateSessionTemplatesInput,
   UpsertNutritionDayInput,
   CreateWorkoutLogInput,
@@ -491,6 +492,51 @@ export async function bulkAddSessionTemplates(
       ...session,
       targetDistance: decimalToNumber(session.targetDistance),
     })),
+  };
+}
+
+export async function updateSessionTemplate(
+  id: string,
+  input: UpdateSessionTemplateInput
+): Promise<SessionTemplateResponse> {
+  const hasUpdates = Object.values(input).some((v) => v !== undefined);
+  if (!hasUpdates) {
+    const existing = await prisma.sessionTemplate.findUniqueOrThrow({
+      where: { id },
+    });
+    return {
+      ...existing,
+      targetDistance: decimalToNumber(existing.targetDistance),
+    };
+  }
+
+  const session = await prisma.sessionTemplate.update({
+    where: { id },
+    data: {
+      ...(input.dayOfWeek !== undefined && { dayOfWeek: input.dayOfWeek }),
+      ...(input.sessionType !== undefined && { sessionType: input.sessionType }),
+      ...(input.name !== undefined && { name: input.name }),
+      ...(input.description !== undefined && { description: input.description }),
+      ...(input.targetDuration !== undefined && { targetDuration: input.targetDuration }),
+      ...(input.targetDistance !== undefined && { targetDistance: input.targetDistance }),
+      ...(input.targetIntensity !== undefined && { targetIntensity: input.targetIntensity }),
+      ...(input.notes !== undefined && { notes: input.notes }),
+    },
+  });
+
+  return {
+    ...session,
+    targetDistance: decimalToNumber(session.targetDistance),
+  };
+}
+
+export async function deleteSessionTemplate(
+  id: string
+): Promise<SessionTemplateResponse> {
+  const session = await prisma.sessionTemplate.delete({ where: { id } });
+  return {
+    ...session,
+    targetDistance: decimalToNumber(session.targetDistance),
   };
 }
 
