@@ -144,6 +144,7 @@ model BudgetCategory {
   expenses Expense[]
   rules    CategorizationRule[]
   scenarioOverrides ScenarioCategoryOverride[]
+  tripItems TripItem[]
 
   @@map("budget_categories")
 }
@@ -286,6 +287,7 @@ model WishlistItem {
 
   // Relations
   category PurchaseCategory @relation(fields: [categoryId], references: [id])
+  tripPackingItem TripPackingItem?
 
   @@index([categoryId])
   @@index([priority])
@@ -718,4 +720,512 @@ model OauthConsent {
   @@index([clientId])
   @@index([userId])
   @@map("oauthConsent")
+}
+
+// ==========================================
+// Trip Planning & Travel Management System
+// ==========================================
+
+enum TripStatus {
+  PLANNING     // Initial planning phase
+  RESEARCHING  // Actively researching options
+  BOOKING      // Making bookings
+  BOOKED       // Main items booked
+  CONFIRMED    // All confirmations received
+  IN_PROGRESS  // Currently on the trip
+  COMPLETED    // Trip finished
+  CANCELLED    // Trip cancelled
+}
+
+enum TripItemType {
+  FLIGHT
+  ACCOMMODATION
+  ACTIVITY
+  MEAL
+  TRANSPORT    // Ground transport (train, bus, car rental, etc.)
+  EVENT        // Concerts, shows, sports events
+  MEETING      // Business meetings, personal appointments
+  OTHER
+}
+
+enum TripItemStatus {
+  IDEA         // Just an idea, not researched yet
+  RESEARCHED   // Looked into it
+  SHORTLISTED  // On the short list
+  BOOKED       // Money paid, booking made
+  CONFIRMED    // Confirmation received
+  WAITLISTED   // On a waitlist
+  CANCELLED    // Was booked but cancelled
+  REJECTED     // Decided against it
+}
+
+enum TripItemPriority {
+  LOW
+  MEDIUM
+  HIGH
+  MUST_DO      // Non-negotiable
+}
+
+enum PackingCategory {
+  CLOTHING
+  ELECTRONICS
+  TOILETRIES
+  DOCUMENTS
+  GEAR         // Sports equipment, camping gear, etc.
+  MEDICATIONS
+  BOOKS_ENTERTAINMENT
+  ACCESSORIES  // Bags, sunglasses, hats, etc.
+  FOOD_SNACKS
+  TRAVEL_ESSENTIALS // Adapters, locks, etc.
+  OTHER
+}
+
+enum PackingStatus {
+  OWNED        // Already have it
+  TO_BUY       // Need to purchase
+  ORDERED      // Ordered but not received
+  PACKED       // Packed in luggage
+}
+
+enum PackingPriority {
+  ESSENTIAL    // Must have
+  IMPORTANT    // Should have
+  NICE_TO_HAVE // Optional
+  OPTIONAL     // If space allows
+}
+
+enum ItineraryStatus {
+  DRAFT        // Work in progress
+  PROPOSED     // Ready for review
+  APPROVED     // Approved by all parties
+  FINAL        // Locked in
+  ARCHIVED     // Past version
+}
+
+enum TimeSlot {
+  MORNING      // ~6am-12pm
+  MIDDAY       // ~11am-2pm
+  AFTERNOON    // ~12pm-6pm
+  EVENING      // ~6pm-11pm
+  NIGHT        // ~9pm-late
+  ALL_DAY      // Full day activity
+  FLEXIBLE     // No specific time
+}
+
+enum DayPace {
+  SLOW         // Relaxed, 1-2 activities
+  MEDIUM       // Moderate, 2-3 activities
+  ACTIVE       // Busy, 3+ activities
+  VERY_ACTIVE  // Packed schedule
+}
+
+enum ReminderStatus {
+  PENDING
+  TRIGGERED    // Reminder date reached
+  COMPLETED    // Task done
+  DISMISSED    // Ignored/not relevant
+  SNOOZED      // Postponed
+}
+
+enum DocumentType {
+  PASSPORT
+  VISA
+  INSURANCE
+  BOOKING_CONFIRMATION
+  TICKET       // Flight, train, event tickets
+  RECEIPT
+  ITINERARY
+  MAP
+  PHOTO
+  VACCINATION_RECORD
+  PRESCRIPTION
+  TRAVEL_AUTHORIZATION
+  OTHER
+}
+
+enum ContactType {
+  ACCOMMODATION
+  ACTIVITY_PROVIDER
+  TRANSPORT
+  RESTAURANT
+  EMERGENCY
+  MEDICAL
+  EMBASSY_CONSULATE
+  LOCAL_CONTACT // Friend/family at destination
+  TOUR_OPERATOR
+  OTHER
+}
+
+enum LocationType {
+  ACCOMMODATION
+  ATTRACTION
+  RESTAURANT
+  TRANSPORT_HUB // Airport, train station, bus terminal
+  MEETING_POINT
+  PARK_RECREATION
+  SHOPPING
+  ENTERTAINMENT
+  MEDICAL
+  EMBASSY
+  OTHER
+}
+
+model Trip {
+  id                String       @id @default(uuid())
+  name              String       // "London Christmas 2026"
+  destination       String       // "London, UK" (can be multiple: "London & Paris")
+  startDate         DateTime     @map("start_date") @db.Date
+  endDate           DateTime     @map("end_date") @db.Date
+  status            TripStatus   @default(PLANNING)
+  travellers        String?      // JSON array: [{name, age?, notes?, birthday?}]
+  budgetTotal       Decimal?     @map("budget_total") @db.Decimal(10, 2)
+  currency          String       @default("AUD") // Primary currency for budget
+  exchangeRates     String?      @map("exchange_rates") // JSON: {GBP: {rate: 0.52, updated_at: "..."}}
+  expectedWeather   String?      @map("expected_weather") // JSON: {temp_low: 2, temp_high: 8, conditions: "Cold, rainy", notes: "..."}
+  seasonalNotes     String?      @map("seasonal_notes") // "Christmas markets open, many attractions closed Dec 25"
+  timeZone          String?      @map("time_zone") // "Europe/London"
+  notes             String?      @db.Text
+  sharingEnabled    Boolean      @default(false) @map("sharing_enabled")
+  sharingLink       String?      @unique @map("sharing_link") // UUID for shared access
+  isTemplate        Boolean      @default(false) @map("is_template")
+  clonedFromTripId  String?      @map("cloned_from_trip_id")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  clonedFromTrip    Trip?              @relation("TripClones", fields: [clonedFromTripId], references: [id])
+  clonedTrips       Trip[]             @relation("TripClones")
+  items             TripItem[]
+  packingItems      TripPackingItem[]
+  itineraries       TripItinerary[]
+  reminders         TripReminder[]
+  documents         TripDocument[]
+  contacts          TripContact[]
+  locations         TripLocation[]
+  notes_entries     TripNote[]
+
+  @@index([status])
+  @@index([startDate])
+  @@index([sharingLink])
+  @@map("trips")
+}
+
+model TripItem {
+  id                    String           @id @default(uuid())
+  tripId                String           @map("trip_id")
+  type                  TripItemType
+  name                  String           // "Harry Potter Studio Tour"
+  description           String?          @db.Text
+  date                  DateTime?        @db.Date // Null = unscheduled idea
+  timeStart             String?          @map("time_start") // "10:00" (stored as string for flexibility)
+  timeEnd               String?          @map("time_end") // "16:00"
+  durationHours         Decimal?         @map("duration_hours") @db.Decimal(5, 2)
+  location              String?          // Simple text location
+  locationId            String?          @map("location_id") // FK to structured location
+  address               String?
+  latitude              Decimal?         @db.Decimal(10, 7)
+  longitude             Decimal?         @db.Decimal(10, 7)
+  status                TripItemStatus   @default(IDEA)
+  priority              TripItemPriority @default(MEDIUM)
+  costEstimate          Decimal?         @map("cost_estimate") @db.Decimal(10, 2)
+  costActual            Decimal?         @map("cost_actual") @db.Decimal(10, 2)
+  costIsPerPerson       Boolean          @default(false) @map("cost_is_per_person")
+  currency              String           @default("AUD")
+  bookingUrl            String?          @map("booking_url") @db.Text
+  bookingReference      String?          @map("booking_reference")
+  confirmationNumber    String?          @map("confirmation_number")
+  bookingDeadline       DateTime?        @map("booking_deadline") @db.Date
+  cancellationPolicy    String?          @map("cancellation_policy") @db.Text
+  isCancellable         Boolean          @default(true) @map("is_cancellable")
+  cancellationDeadline  DateTime?        @map("cancellation_deadline") @db.Date
+  requiresId            Boolean          @default(false) @map("requires_id") // Passport/license required
+  ageRestrictions       String?          @map("age_restrictions") // "18+", "All ages", etc.
+
+  // Transport-specific fields
+  departureLocationId   String?          @map("departure_location_id")
+  arrivalLocationId     String?          @map("arrival_location_id")
+  departureTime         String?          @map("departure_time") // "14:30"
+  arrivalTime           String?          @map("arrival_time") // "18:45"
+  connectionToItemId    String?          @map("connection_to_item_id") // For multi-leg journeys
+  seatNumbers           String?          @map("seat_numbers") // "12A, 12B"
+  terminal              String?          // "Terminal 5"
+  gate                  String?          // "Gate 23"
+
+  // Meal-specific fields
+  partySize             Int?             @map("party_size")
+  dietaryRequirements   String?          @map("dietary_requirements") // JSON array: ["vegetarian", "nut allergy"]
+  specialRequests       String?          @map("special_requests")
+
+  // Integration fields
+  budgetCategoryId      String?          @map("budget_category_id") // Link to budget system
+  expenseId             String?          @unique @map("expense_id") // Link to created expense
+
+  tags                  String?          // JSON array: ["birthday", "must-book-early"]
+  notes                 String?          @db.Text
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  trip                  Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  structuredLocation    TripLocation?    @relation("ItemLocation", fields: [locationId], references: [id])
+  departureLocation     TripLocation?    @relation("DepartureLocation", fields: [departureLocationId], references: [id])
+  arrivalLocation       TripLocation?    @relation("ArrivalLocation", fields: [arrivalLocationId], references: [id])
+  connectionToItem      TripItem?        @relation("ConnectedLegs", fields: [connectionToItemId], references: [id])
+  connectedFromItems    TripItem[]       @relation("ConnectedLegs")
+  budgetCategory        BudgetCategory?  @relation(fields: [budgetCategoryId], references: [id])
+  options               TripItemOption[]
+  itinerarySlots        TripItinerarySlot[]
+  backupItinerarySlots  TripItinerarySlot[] @relation("BackupItem")
+  reminders             TripReminder[]
+  documents             TripDocument[]
+  contacts              TripContact[]
+
+  @@index([tripId])
+  @@index([type])
+  @@index([status])
+  @@index([priority])
+  @@index([date])
+  @@index([locationId])
+  @@map("trip_items")
+}
+
+model TripItemOption {
+  id                String              @id @default(uuid())
+  tripItemId        String              @map("trip_item_id")
+  name              String              // "The Resident Victoria"
+  description       String?             @db.Text
+  costEstimate      Decimal?            @map("cost_estimate") @db.Decimal(10, 2)
+  costIsPerPerson   Boolean             @default(false) @map("cost_is_per_person")
+  currency          String              @default("AUD")
+  pros              String?             // JSON array: ["Location", "Brand we know"]
+  cons              String?             // JSON array: ["No gym", "Small rooms 19sqm"]
+  url               String?             @db.Text
+  status            TripItemStatus      @default(RESEARCHED)
+  rejectionReason   String?             @map("rejection_reason") @db.Text
+  notes             String?             @db.Text
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  // Relations
+  tripItem          TripItem            @relation(fields: [tripItemId], references: [id], onDelete: Cascade)
+
+  @@index([tripItemId])
+  @@index([status])
+  @@map("trip_item_options")
+}
+
+model TripPackingItem {
+  id                String           @id @default(uuid())
+  tripId            String           @map("trip_id")
+  category          PackingCategory
+  item              String           // "Icebreaker 200 Oasis Leggings"
+  quantity          Int              @default(1)
+  status            PackingStatus    @default(OWNED)
+  priority          PackingPriority  @default(ESSENTIAL)
+  purchaseUrl       String?          @map("purchase_url") @db.Text
+  purchasePrice     Decimal?         @map("purchase_price") @db.Decimal(10, 2)
+  currency          String           @default("AUD")
+  purchaseDeadline  DateTime?        @map("purchase_deadline") @db.Date
+  wishlistItemId    String?          @unique @map("wishlist_item_id") // Link to shopping system
+  notes             String?          @db.Text
+  tags              String?          // JSON array: ["layering", "winter"]
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  trip              Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  wishlistItem      WishlistItem?    @relation(fields: [wishlistItemId], references: [id])
+
+  @@index([tripId])
+  @@index([category])
+  @@index([status])
+  @@index([priority])
+  @@map("trip_packing_items")
+}
+
+model TripItinerary {
+  id                String             @id @default(uuid())
+  tripId            String             @map("trip_id")
+  version           Int                @default(1)
+  name              String             // "Draft v1 - Pre-accommodation decision"
+  status            ItineraryStatus    @default(DRAFT)
+  notes             String?            @db.Text
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  trip              Trip               @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  days              TripItineraryDay[]
+
+  @@index([tripId])
+  @@index([status])
+  @@map("trip_itineraries")
+}
+
+model TripItineraryDay {
+  id                String               @id @default(uuid())
+  itineraryId       String               @map("itinerary_id")
+  date              DateTime             @db.Date
+  dayNumber         Int                  @map("day_number") // Day 1, Day 2, etc.
+  theme             String?              // "Christmas Day", "Museums Day"
+  pace              DayPace              @default(MEDIUM)
+  notes             String?              @db.Text
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+
+  // Relations
+  itinerary         TripItinerary        @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  slots             TripItinerarySlot[]
+
+  @@index([itineraryId])
+  @@index([date])
+  @@map("trip_itinerary_days")
+}
+
+model TripItinerarySlot {
+  id                  String            @id @default(uuid())
+  itineraryDayId      String            @map("itinerary_day_id")
+  tripItemId          String?           @map("trip_item_id") // Link to actual activity (nullable for free-form entries)
+  timeSlot            TimeSlot
+  timeStart           String?           @map("time_start") // "13:00" (more specific than timeSlot)
+  timeEnd             String?           @map("time_end") // "15:30"
+  description         String?           @db.Text // "Christmas lunch at The Landmark" (if no tripItemId)
+  travelTimeMinutes   Int?              @map("travel_time_minutes") // Travel time from previous location
+  backupTripItemId    String?           @map("backup_trip_item_id") // Alternative if primary falls through
+  estimatedCost       Decimal?          @map("estimated_cost") @db.Decimal(10, 2)
+  weatherDependent    Boolean           @default(false) @map("weather_dependent")
+  requiresBooking     Boolean           @default(false) @map("requires_booking")
+  notes               String?           @db.Text
+  sortOrder           Int               @default(0) @map("sort_order")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  itineraryDay        TripItineraryDay  @relation(fields: [itineraryDayId], references: [id], onDelete: Cascade)
+  tripItem            TripItem?         @relation(fields: [tripItemId], references: [id])
+  backupTripItem      TripItem?         @relation("BackupItem", fields: [backupTripItemId], references: [id])
+
+  @@index([itineraryDayId])
+  @@index([tripItemId])
+  @@index([sortOrder])
+  @@map("trip_itinerary_slots")
+}
+
+model TripReminder {
+  id                String          @id @default(uuid())
+  tripId            String          @map("trip_id")
+  tripItemId        String?         @map("trip_item_id") // Optional link to specific item
+  title             String          // "Book Harry Potter Studio Tour"
+  description       String?         @db.Text
+  remindDate        DateTime        @map("remind_date") @db.Date
+  status            ReminderStatus  @default(PENDING)
+  priority          TripItemPriority @default(MEDIUM)
+  taskType          String?         @map("task_type") // "BOOKING", "DOCUMENT", "MEDICAL", "RESEARCH", etc.
+  checklistItems    String?         @map("checklist_items") // JSON: [{text: "...", completed: false}]
+  completedAt       DateTime?       @map("completed_at")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  trip              Trip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  tripItem          TripItem?       @relation(fields: [tripItemId], references: [id])
+
+  @@index([tripId])
+  @@index([remindDate])
+  @@index([status])
+  @@map("trip_reminders")
+}
+
+model TripDocument {
+  id                String        @id @default(uuid())
+  tripId            String        @map("trip_id")
+  tripItemId        String?       @map("trip_item_id") // Link to related booking/activity
+  travellerName     String?       @map("traveller_name") // Whose passport/insurance
+  type              DocumentType
+  title             String        // "Aston's Passport", "Hotel Booking Confirmation"
+  fileUrl           String?       @map("file_url") @db.Text // URL to stored file
+  documentNumber    String?       @map("document_number") // Passport #, booking ref, policy #
+  issueDate         DateTime?     @map("issue_date") @db.Date
+  expiryDate        DateTime?     @map("expiry_date") @db.Date
+  notes             String?       @db.Text
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  trip              Trip          @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  tripItem          TripItem?     @relation(fields: [tripItemId], references: [id])
+
+  @@index([tripId])
+  @@index([type])
+  @@index([travellerName])
+  @@map("trip_documents")
+}
+
+model TripContact {
+  id                String        @id @default(uuid())
+  tripId            String        @map("trip_id")
+  tripItemId        String?       @map("trip_item_id") // Link to hotel/activity
+  type              ContactType
+  name              String        // "The Resident Victoria Front Desk"
+  phone             String?
+  email             String?
+  address           String?       @db.Text
+  isEmergency       Boolean       @default(false) @map("is_emergency")
+  notes             String?       @db.Text
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  trip              Trip          @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  tripItem          TripItem?     @relation(fields: [tripItemId], references: [id])
+
+  @@index([tripId])
+  @@index([type])
+  @@index([isEmergency])
+  @@map("trip_contacts")
+}
+
+model TripLocation {
+  id                String        @id @default(uuid())
+  tripId            String        @map("trip_id")
+  name              String        // "The Resident Victoria"
+  address           String?       @db.Text
+  city              String?
+  country           String?
+  latitude          Decimal?      @db.Decimal(10, 7)
+  longitude         Decimal?      @db.Decimal(10, 7)
+  placeId           String?       @map("place_id") // Google Places ID
+  type              LocationType
+  notes             String?       @db.Text
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  trip              Trip          @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  items             TripItem[]    @relation("ItemLocation")
+  departureItems    TripItem[]    @relation("DepartureLocation")
+  arrivalItems      TripItem[]    @relation("ArrivalLocation")
+
+  @@index([tripId])
+  @@index([type])
+  @@map("trip_locations")
+}
+
+model TripNote {
+  id                String        @id @default(uuid())
+  tripId            String        @map("trip_id")
+  tripItemId        String?       @map("trip_item_id") // Optional link to specific item
+  title             String?
+  content           String        @db.Text
+  noteType          String        @default("GENERAL") @map("note_type") // GENERAL, IDEA, RESEARCH, DECISION, MEMORY
+  tags              String?       // JSON array
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  trip              Trip          @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+  @@index([noteType])
+  @@map("trip_notes")
 }
