@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db';
-import { ReminderStatus, ReminderPriority, TaskType } from '@prisma/client';
+import { ReminderStatus, TripItemPriority } from '@prisma/client';
 import type { TripReminderResponse } from '../types';
 
 // Helper functions
@@ -24,8 +24,8 @@ export async function addReminder(data: {
   title: string;
   description?: string;
   remindDate: Date;
-  priority?: ReminderPriority;
-  taskType?: TaskType;
+  priority?: TripItemPriority;
+  taskType?: string;
   checklistItems?: Array<{ task: string; completed: boolean }>;
   notes?: string;
 }): Promise<TripReminderResponse> {
@@ -37,7 +37,7 @@ export async function addReminder(data: {
       description: data.description,
       remindDate: data.remindDate,
       status: ReminderStatus.PENDING,
-      priority: data.priority || ReminderPriority.MEDIUM,
+      priority: data.priority || TripItemPriority.MEDIUM,
       taskType: data.taskType,
       checklistItems: stringifyJsonField(data.checklistItems),
       notes: data.notes,
@@ -52,8 +52,8 @@ export async function listReminders(
   tripId: string,
   filters?: {
     status?: ReminderStatus | ReminderStatus[];
-    priority?: ReminderPriority;
-    taskType?: TaskType;
+    priority?: TripItemPriority;
+    taskType?: string;
     tripItemId?: string;
     overdueOnly?: boolean;
   }
@@ -88,7 +88,7 @@ export async function updateReminder(
     description?: string;
     remindDate?: Date;
     status?: ReminderStatus;
-    priority?: ReminderPriority;
+    priority?: TripItemPriority;
     checklistItems?: Array<{ task: string; completed: boolean }>;
     notes?: string;
   }
