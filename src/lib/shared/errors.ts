@@ -49,13 +49,14 @@ export class McpToolError extends Error {
    * Returns JSON-serializable error object
    */
   toJSON() {
-    return {
-      error: {
-        code: this.code,
-        message: this.message,
-        ...(this.details && { details: this.details }),
-      },
+    const error: { code: ErrorCode; message: string; details?: unknown } = {
+      code: this.code,
+      message: this.message,
     };
+    if (this.details) {
+      error.details = this.details;
+    }
+    return { error };
   }
 
   /**
@@ -282,4 +283,17 @@ export function withErrorHandling<T extends any[], R>(
       throw handleQueryError(error, context);
     }
   };
+}
+
+/**
+ * Safely extract error message from unknown error type
+ */
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return 'Unknown error';
 }

@@ -1,125 +1,161 @@
 import { prisma } from '@/lib/db';
-import { DocumentType } from '@prisma/client';
+import { DocumentType, TripDocument } from '@prisma/client';
+import { handleQueryError } from '@/lib/shared/errors';
 import type { TripDocumentResponse } from '../types';
 
-// Add document
+/**
+ * Add a new document to a trip
+ *
+ * @param data - Document data
+ * @returns The created document
+ */
 export async function addDocument(data: {
   tripId: string;
   type: DocumentType;
-  name: string;
-  description?: string;
-  documentNumber?: string;
-  expiryDate?: Date;
-  issueDate?: Date;
-  issuingAuthority?: string;
+  title: string;
+  tripItemId?: string;
+  travellerName?: string;
   fileUrl?: string;
-  status?: string;
-  assignedTo?: string;
+  documentNumber?: string;
+  issueDate?: Date;
+  expiryDate?: Date;
   notes?: string;
 }): Promise<TripDocumentResponse> {
-  const document = await prisma.tripDocument.create({
-    data: {
-      tripId: data.tripId,
-      type: data.type,
-      title: data.name, // Schema uses 'title' not 'name'
-      travellerName: data.assignedTo, // Schema uses 'travellerName' not 'assignedTo'
-      documentNumber: data.documentNumber,
-      expiryDate: data.expiryDate,
-      issueDate: data.issueDate,
-      fileUrl: data.fileUrl,
-      notes: data.notes,
-    },
-  });
+  try {
+    const document = await prisma.tripDocument.create({
+      data: {
+        tripId: data.tripId,
+        type: data.type,
+        title: data.title,
+        tripItemId: data.tripItemId,
+        travellerName: data.travellerName,
+        fileUrl: data.fileUrl,
+        documentNumber: data.documentNumber,
+        issueDate: data.issueDate,
+        expiryDate: data.expiryDate,
+        notes: data.notes,
+      },
+    });
 
-  return mapDocumentToResponse(document);
+    return mapDocumentToResponse(document);
+  } catch (error) {
+    throw handleQueryError(error, 'addDocument');
+  }
 }
 
-// List documents with filters
+/**
+ * List documents for a trip with optional filters
+ *
+ * @param tripId - The trip ID
+ * @param filters - Optional filters
+ * @returns List of documents
+ */
 export async function listDocuments(
   tripId: string,
   filters?: {
     type?: DocumentType | DocumentType[];
-    status?: string;
-    assignedTo?: string;
+    travellerName?: string;
     expiringWithinDays?: number;
   }
 ): Promise<TripDocumentResponse[]> {
-  const futureDate = filters?.expiringWithinDays
-    ? new Date(Date.now() + filters.expiringWithinDays * 24 * 60 * 60 * 1000)
-    : undefined;
+  try {
+    const futureDate = filters?.expiringWithinDays
+      ? new Date(Date.now() + filters.expiringWithinDays * 24 * 60 * 60 * 1000)
+      : undefined;
 
-  const documents = await prisma.tripDocument.findMany({
-    where: {
-      tripId,
-      ...(filters?.type && {
-        type: Array.isArray(filters.type) ? { in: filters.type } : filters.type,
-      }),
-      ...(filters?.assignedTo && { travellerName: filters.assignedTo }), // Schema uses 'travellerName'
-      ...(futureDate && {
-        expiryDate: {
-          lte: futureDate,
-          gte: new Date(),
-        },
-      }),
-    },
-    orderBy: [{ type: 'asc' }, { title: 'asc' }], // Schema uses 'title'
-  });
+    const documents = await prisma.tripDocument.findMany({
+      where: {
+        tripId,
+        ...(filters?.type && {
+          type: Array.isArray(filters.type) ? { in: filters.type } : filters.type,
+        }),
+        ...(filters?.travellerName && { travellerName: filters.travellerName }),
+        ...(futureDate && {
+          expiryDate: {
+            lte: futureDate,
+            gte: new Date(),
+          },
+        }),
+      },
+      orderBy: [{ type: 'asc' }, { title: 'asc' }],
+    });
 
-  return documents.map(mapDocumentToResponse);
+    return documents.map(mapDocumentToResponse);
+  } catch (error) {
+    throw handleQueryError(error, 'listDocuments');
+  }
 }
 
-// Update document
+/**
+ * Update an existing document
+ *
+ * @param id - Document ID
+ * @param data - Fields to update
+ * @returns The updated document
+ */
 export async function updateDocument(
   id: string,
   data: {
-    name?: string;
-    description?: string;
-    documentNumber?: string;
-    expiryDate?: Date;
-    issueDate?: Date;
-    issuingAuthority?: string;
+    title?: string;
+    travellerName?: string;
     fileUrl?: string;
-    status?: string;
+    documentNumber?: string;
+    issueDate?: Date;
+    expiryDate?: Date;
     notes?: string;
   }
 ): Promise<TripDocumentResponse> {
-  const document = await prisma.tripDocument.update({
-    where: { id },
-    data: {
-      ...(data.name && { title: data.name }), // Schema uses 'title'
-      ...(data.documentNumber !== undefined && { documentNumber: data.documentNumber }),
-      ...(data.expiryDate !== undefined && { expiryDate: data.expiryDate }),
-      ...(data.issueDate !== undefined && { issueDate: data.issueDate }),
-      ...(data.fileUrl !== undefined && { fileUrl: data.fileUrl }),
-      ...(data.notes !== undefined && { notes: data.notes }),
-    },
-  });
+  try {
+    const document = await prisma.tripDocument.update({
+      where: { id },
+      data: {
+        ...(data.title && { title: data.title }),
+        ...(data.travellerName !== undefined && { travellerName: data.travellerName }),
+        ...(data.fileUrl !== undefined && { fileUrl: data.fileUrl }),
+        ...(data.documentNumber !== undefined && { documentNumber: data.documentNumber }),
+        ...(data.issueDate !== undefined && { issueDate: data.issueDate }),
+        ...(data.expiryDate !== undefined && { expiryDate: data.expiryDate }),
+        ...(data.notes !== undefined && { notes: data.notes }),
+      },
+    });
 
-  return mapDocumentToResponse(document);
+    return mapDocumentToResponse(document);
+  } catch (error) {
+    throw handleQueryError(error, 'updateDocument');
+  }
 }
 
-// Delete document
+/**
+ * Delete a document
+ *
+ * @param id - Document ID
+ * @returns Success status
+ */
 export async function deleteDocument(id: string): Promise<{ success: boolean }> {
-  await prisma.tripDocument.delete({ where: { id } });
-  return { success: true };
+  try {
+    await prisma.tripDocument.delete({ where: { id } });
+    return { success: true };
+  } catch (error) {
+    throw handleQueryError(error, 'deleteDocument');
+  }
 }
 
-// Helper to map Prisma model to response type
-function mapDocumentToResponse(document: any): TripDocumentResponse {
+/**
+ * Map Prisma TripDocument model to response type
+ */
+function mapDocumentToResponse(document: TripDocument): TripDocumentResponse {
   return {
     id: document.id,
     tripId: document.tripId,
+    tripItemId: document.tripItemId ?? undefined,
+    travellerName: document.travellerName ?? undefined,
     type: document.type,
-    name: document.title, // Map title back to name
-    description: undefined, // Schema doesn't have description
-    documentNumber: document.documentNumber || undefined,
-    expiryDate: document.expiryDate || undefined,
-    issueDate: document.issueDate || undefined,
-    issuingAuthority: undefined, // Schema doesn't have issuingAuthority
-    fileUrl: document.fileUrl || undefined,
-    status: undefined, // Schema doesn't have status
-    assignedTo: document.travellerName || undefined, // Map travellerName back to assignedTo
-    notes: document.notes || undefined,
+    title: document.title,
+    fileUrl: document.fileUrl ?? undefined,
+    documentNumber: document.documentNumber ?? undefined,
+    issueDate: document.issueDate ?? undefined,
+    expiryDate: document.expiryDate ?? undefined,
+    notes: document.notes ?? undefined,
     createdAt: document.createdAt,
     updatedAt: document.updatedAt,
   };

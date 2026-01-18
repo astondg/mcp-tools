@@ -205,7 +205,7 @@ export async function withRetryTransaction<T>(
   config: RetryConfig = {}
 ): Promise<T> {
   return withRetry(
-    () => prisma.$transaction(fn as any),
+    () => prisma.$transaction(fn as any) as Promise<T>,
     config
   );
 }

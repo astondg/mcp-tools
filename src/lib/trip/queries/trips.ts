@@ -157,7 +157,7 @@ export async function getTrip(
 
   // Add included relations if requested
   if (options?.includeItems && trip.items) {
-    response.items = trip.items.map((item) => ({
+    response.items = trip.items.map((item: any) => ({
       id: item.id,
       tripId: item.tripId,
       type: item.type,
@@ -204,7 +204,7 @@ export async function getTrip(
       notes: item.notes || undefined,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
-      options: item.options?.map((opt) => ({
+      options: item.options?.map((opt: any) => ({
         id: opt.id,
         tripItemId: opt.tripItemId,
         name: opt.name,

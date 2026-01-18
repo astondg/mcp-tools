@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import { NameSchema, AgeSchema, ShortDescriptionSchema, SafeStringSchema } from './common';
+import { NameSchema, AgeSchema, ShortDescriptionSchema } from './common';
 
 /**
  * Traveller schema for trip planning
@@ -70,7 +70,7 @@ export type BookingConfirmation = z.infer<typeof BookingConfirmationSchema>;
  * Tags schema (array of strings)
  */
 export const TagsSchema = z.array(
-  SafeStringSchema.min(1).max(50)
+  z.string().min(1).max(50).transform((val) => val.replace(/<[^>]*>/g, '').trim())
 ).max(50, 'Cannot have more than 50 tags');
 
 export type Tags = z.infer<typeof TagsSchema>;

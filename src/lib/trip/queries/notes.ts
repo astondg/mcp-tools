@@ -1,7 +1,11 @@
 import { prisma } from '@/lib/db';
+import { TripNote } from '@prisma/client';
+import { handleQueryError } from '@/lib/shared/errors';
 import type { TripNoteResponse } from '../types';
 
-// Helper functions
+/**
+ * Parse JSON string field to typed value
+ */
 function parseJsonField<T>(value: string | null): T | undefined {
   if (!value) return undefined;
   try {
@@ -11,118 +15,135 @@ function parseJsonField<T>(value: string | null): T | undefined {
   }
 }
 
-function stringifyJsonField<T>(value: T | undefined): string | undefined {
-  if (!value) return undefined;
-  return JSON.stringify(value);
-}
-
-// Add note
+/**
+ * Add a new note to a trip
+ *
+ * @param data - Note data
+ * @returns The created note
+ */
 export async function addNote(data: {
   tripId: string;
   tripItemId?: string;
-  title: string;
+  title?: string;
   content: string;
-  noteDate?: Date;
   tags?: string[];
-  isPinned?: boolean;
-  attachments?: Array<{ name: string; url: string; type?: string }>;
 }): Promise<TripNoteResponse> {
-  const note = await prisma.tripNote.create({
-    data: {
-      tripId: data.tripId,
-      tripItemId: data.tripItemId,
-      title: data.title,
-      content: data.content,
-      noteDate: data.noteDate || new Date(),
-      tags: stringifyJsonField(data.tags),
-      isPinned: data.isPinned || false,
-      attachments: stringifyJsonField(data.attachments),
-    },
-  });
+  try {
+    const note = await prisma.tripNote.create({
+      data: {
+        tripId: data.tripId,
+        tripItemId: data.tripItemId,
+        title: data.title,
+        content: data.content,
+        tags: data.tags ? JSON.stringify(data.tags) : null,
+      },
+    });
 
-  return mapNoteToResponse(note);
+    return mapNoteToResponse(note);
+  } catch (error) {
+    throw handleQueryError(error, 'addNote');
+  }
 }
 
-// List notes with filters
+/**
+ * List notes for a trip with optional filters
+ *
+ * @param tripId - The trip ID
+ * @param filters - Optional filters
+ * @returns List of notes
+ */
 export async function listNotes(
   tripId: string,
   filters?: {
     tripItemId?: string;
     tag?: string;
-    pinnedOnly?: boolean;
     dateFrom?: Date;
     dateTo?: Date;
     searchTerm?: string;
   }
 ): Promise<TripNoteResponse[]> {
-  const notes = await prisma.tripNote.findMany({
-    where: {
-      tripId,
-      ...(filters?.tripItemId && { tripItemId: filters.tripItemId }),
-      ...(filters?.tag && { tags: { contains: filters.tag } }),
-      ...(filters?.pinnedOnly && { isPinned: true }),
-      ...(filters?.dateFrom && { noteDate: { gte: filters.dateFrom } }),
-      ...(filters?.dateTo && { noteDate: { lte: filters.dateTo } }),
-      ...(filters?.searchTerm && {
-        OR: [
-          { title: { contains: filters.searchTerm, mode: 'insensitive' } },
-          { content: { contains: filters.searchTerm, mode: 'insensitive' } },
-        ],
-      }),
-    },
-    orderBy: [{ isPinned: 'desc' }, { noteDate: 'desc' }],
-  });
+  try {
+    const notes = await prisma.tripNote.findMany({
+      where: {
+        tripId,
+        ...(filters?.tripItemId && { tripItemId: filters.tripItemId }),
+        ...(filters?.tag && { tags: { contains: filters.tag } }),
+        ...(filters?.dateFrom && { createdAt: { gte: filters.dateFrom } }),
+        ...(filters?.dateTo && { createdAt: { lte: filters.dateTo } }),
+        ...(filters?.searchTerm && {
+          OR: [
+            { title: { contains: filters.searchTerm, mode: 'insensitive' as const } },
+            { content: { contains: filters.searchTerm, mode: 'insensitive' as const } },
+          ],
+        }),
+      },
+      orderBy: [{ createdAt: 'desc' }],
+    });
 
-  return notes.map(mapNoteToResponse);
+    return notes.map(mapNoteToResponse);
+  } catch (error) {
+    throw handleQueryError(error, 'listNotes');
+  }
 }
 
-// Update note
+/**
+ * Update an existing note
+ *
+ * @param id - Note ID
+ * @param data - Fields to update
+ * @returns The updated note
+ */
 export async function updateNote(
   id: string,
   data: {
     title?: string;
     content?: string;
-    noteDate?: Date;
     tags?: string[];
-    isPinned?: boolean;
-    attachments?: Array<{ name: string; url: string; type?: string }>;
   }
 ): Promise<TripNoteResponse> {
-  const note = await prisma.tripNote.update({
-    where: { id },
-    data: {
-      ...(data.title && { title: data.title }),
-      ...(data.content && { content: data.content }),
-      ...(data.noteDate && { noteDate: data.noteDate }),
-      ...(data.tags && { tags: stringifyJsonField(data.tags) }),
-      ...(data.isPinned !== undefined && { isPinned: data.isPinned }),
-      ...(data.attachments && { attachments: stringifyJsonField(data.attachments) }),
-    },
-  });
+  try {
+    const note = await prisma.tripNote.update({
+      where: { id },
+      data: {
+        ...(data.title !== undefined && { title: data.title }),
+        ...(data.content && { content: data.content }),
+        ...(data.tags !== undefined && { tags: data.tags ? JSON.stringify(data.tags) : null }),
+      },
+    });
 
-  return mapNoteToResponse(note);
+    return mapNoteToResponse(note);
+  } catch (error) {
+    throw handleQueryError(error, 'updateNote');
+  }
 }
 
-// Delete note
+/**
+ * Delete a note
+ *
+ * @param id - Note ID
+ * @returns Success status
+ */
 export async function deleteNote(id: string): Promise<{ success: boolean }> {
-  await prisma.tripNote.delete({ where: { id } });
-  return { success: true };
+  try {
+    await prisma.tripNote.delete({ where: { id } });
+    return { success: true };
+  } catch (error) {
+    throw handleQueryError(error, 'deleteNote');
+  }
 }
 
-// Helper to map Prisma model to response type
-function mapNoteToResponse(note: any): TripNoteResponse {
+/**
+ * Map Prisma TripNote model to response type
+ */
+function mapNoteToResponse(note: TripNote): TripNoteResponse {
   return {
     id: note.id,
     tripId: note.tripId,
-    tripItemId: note.tripItemId || undefined,
-    title: note.title,
+    tripItemId: note.tripItemId ?? undefined,
+    title: note.title ?? undefined,
     content: note.content,
-    noteDate: note.noteDate,
+    noteType: note.noteType,
     tags: parseJsonField<string[]>(note.tags),
-    isPinned: note.isPinned,
-    attachments: parseJsonField<Array<{ name: string; url: string; type?: string }>>(
-      note.attachments
-    ),
     createdAt: note.createdAt,
     updatedAt: note.updatedAt,
   };

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { getErrorMessage } from '@/lib/shared/errors';
 import {
   createTrip,
   listTrips,
@@ -55,10 +56,14 @@ import {
   TripItemStatus,
   TripItemPriority,
   PackingStatus,
+  PackingPriority,
   ReminderStatus,
   DocumentType,
   ContactType,
   LocationType,
+  ItineraryStatus,
+  TimeSlot,
+  DayPace,
 } from '@prisma/client';
 
 export function registerTripTools(server: McpServer) {
@@ -124,7 +129,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error creating trip: ${error.message}` },
+            { type: 'text' as const, text: `Error creating trip: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -151,7 +156,7 @@ export function registerTripTools(server: McpServer) {
         return { content: [{ type: 'text' as const, text: JSON.stringify(trips, null, 2) }] };
       } catch (error) {
         return {
-          content: [{ type: 'text' as const, text: `Error listing trips: ${error.message}` }],
+          content: [{ type: 'text' as const, text: `Error listing trips: ${getErrorMessage(error)}` }],
           isError: true,
         };
       }
@@ -184,7 +189,7 @@ export function registerTripTools(server: McpServer) {
         return { content: [{ type: 'text' as const, text: JSON.stringify(trip, null, 2) }] };
       } catch (error) {
         return {
-          content: [{ type: 'text' as const, text: `Error getting trip: ${error.message}` }],
+          content: [{ type: 'text' as const, text: `Error getting trip: ${getErrorMessage(error)}` }],
           isError: true,
         };
       }
@@ -219,7 +224,7 @@ export function registerTripTools(server: McpServer) {
         return { content: [{ type: 'text' as const, text: JSON.stringify(trip, null, 2) }] };
       } catch (error) {
         return {
-          content: [{ type: 'text' as const, text: `Error updating trip: ${error.message}` }],
+          content: [{ type: 'text' as const, text: `Error updating trip: ${getErrorMessage(error)}` }],
           isError: true,
         };
       }
@@ -250,7 +255,7 @@ export function registerTripTools(server: McpServer) {
         return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
       } catch (error) {
         return {
-          content: [{ type: 'text' as const, text: `Error deleting trip: ${error.message}` }],
+          content: [{ type: 'text' as const, text: `Error deleting trip: ${getErrorMessage(error)}` }],
           isError: true,
         };
       }
@@ -270,7 +275,7 @@ export function registerTripTools(server: McpServer) {
         return { content: [{ type: 'text' as const, text: JSON.stringify(status, null, 2) }] };
       } catch (error) {
         return {
-          content: [{ type: 'text' as const, text: `Error getting trip status: ${error.message}` }],
+          content: [{ type: 'text' as const, text: `Error getting trip status: ${getErrorMessage(error)}` }],
           isError: true,
         };
       }
@@ -291,7 +296,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error getting budget summary: ${error.message}` },
+            { type: 'text' as const, text: `Error getting budget summary: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -354,7 +359,7 @@ export function registerTripTools(server: McpServer) {
         return { content: [{ type: 'text' as const, text: JSON.stringify(item, null, 2) }] };
       } catch (error) {
         return {
-          content: [{ type: 'text' as const, text: `Error adding trip item: ${error.message}` }],
+          content: [{ type: 'text' as const, text: `Error adding trip item: ${getErrorMessage(error)}` }],
           isError: true,
         };
       }
@@ -386,7 +391,7 @@ export function registerTripTools(server: McpServer) {
         return { content: [{ type: 'text' as const, text: JSON.stringify(items, null, 2) }] };
       } catch (error) {
         return {
-          content: [{ type: 'text' as const, text: `Error listing trip items: ${error.message}` }],
+          content: [{ type: 'text' as const, text: `Error listing trip items: ${getErrorMessage(error)}` }],
           isError: true,
         };
       }
@@ -431,7 +436,7 @@ export function registerTripTools(server: McpServer) {
         return { content: [{ type: 'text' as const, text: JSON.stringify(item, null, 2) }] };
       } catch (error) {
         return {
-          content: [{ type: 'text' as const, text: `Error updating trip item: ${error.message}` }],
+          content: [{ type: 'text' as const, text: `Error updating trip item: ${getErrorMessage(error)}` }],
           isError: true,
         };
       }
@@ -451,7 +456,7 @@ export function registerTripTools(server: McpServer) {
         return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
       } catch (error) {
         return {
-          content: [{ type: 'text' as const, text: `Error deleting trip item: ${error.message}` }],
+          content: [{ type: 'text' as const, text: `Error deleting trip item: ${getErrorMessage(error)}` }],
           isError: true,
         };
       }
@@ -492,7 +497,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error adding trip item option: ${error.message}` },
+            { type: 'text' as const, text: `Error adding trip item option: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -515,7 +520,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error selecting option: ${error.message}` },
+            { type: 'text' as const, text: `Error selecting option: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -534,25 +539,29 @@ export function registerTripTools(server: McpServer) {
     {
       tripId: z.string().uuid(),
       name: z.string().min(1).max(200),
-      category: z.string().max(50).optional().describe('e.g., "Clothing", "Electronics"'),
+      category: z.string().max(50).optional().describe('e.g., "CLOTHING", "ELECTRONICS", "TOILETRIES"'),
       quantity: z.number().int().min(1).optional(),
       status: z.nativeEnum(PackingStatus).optional(),
+      priority: z.nativeEnum(PackingPriority).optional(),
       purchasePrice: z.number().min(0).optional(),
       currency: z.string().length(3).optional(),
       purchaseUrl: z.string().url().optional(),
+      purchaseDeadline: z.string().datetime().optional(),
       wishlistItemId: z.string().uuid().optional(),
-      budgetCategoryId: z.string().uuid().optional(),
-      assignedTo: z.string().max(100).optional(),
       notes: z.string().optional(),
+      tags: z.array(z.string()).optional(),
     },
     async (params) => {
       try {
-        const item = await addPackingItem(params);
+        const item = await addPackingItem({
+          ...params,
+          purchaseDeadline: params.purchaseDeadline ? new Date(params.purchaseDeadline) : undefined,
+        });
         return { content: [{ type: 'text' as const, text: JSON.stringify(item, null, 2) }] };
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error adding packing item: ${error.message}` },
+            { type: 'text' as const, text: `Error adding packing item: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -568,20 +577,18 @@ export function registerTripTools(server: McpServer) {
       tripId: z.string().uuid(),
       status: z.union([z.nativeEnum(PackingStatus), z.array(z.nativeEnum(PackingStatus))]).optional(),
       category: z.string().optional(),
-      assignedTo: z.string().optional(),
     },
     async (params) => {
       try {
         const items = await listPackingItems(params.tripId, {
           status: params.status,
           category: params.category,
-          assignedTo: params.assignedTo,
         });
         return { content: [{ type: 'text' as const, text: JSON.stringify(items, null, 2) }] };
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error listing packing items: ${error.message}` },
+            { type: 'text' as const, text: `Error listing packing items: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -599,19 +606,24 @@ export function registerTripTools(server: McpServer) {
       category: z.string().max(50).optional(),
       quantity: z.number().int().min(1).optional(),
       status: z.nativeEnum(PackingStatus).optional(),
+      priority: z.nativeEnum(PackingPriority).optional(),
       purchasePrice: z.number().min(0).optional(),
       purchaseUrl: z.string().url().optional(),
-      assignedTo: z.string().max(100).optional(),
+      purchaseDeadline: z.string().datetime().optional(),
       notes: z.string().optional(),
+      tags: z.array(z.string()).optional(),
     },
     async (params) => {
       try {
-        const item = await updatePackingItem(params.id, params);
+        const item = await updatePackingItem(params.id, {
+          ...params,
+          purchaseDeadline: params.purchaseDeadline ? new Date(params.purchaseDeadline) : undefined,
+        });
         return { content: [{ type: 'text' as const, text: JSON.stringify(item, null, 2) }] };
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error updating packing item: ${error.message}` },
+            { type: 'text' as const, text: `Error updating packing item: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -633,7 +645,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error deleting packing item: ${error.message}` },
+            { type: 'text' as const, text: `Error deleting packing item: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -657,7 +669,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error bulk updating packing items: ${error.message}` },
+            { type: 'text' as const, text: `Error bulk updating packing items: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -676,8 +688,8 @@ export function registerTripTools(server: McpServer) {
     {
       tripId: z.string().uuid(),
       name: z.string().min(1).max(100).describe('e.g., "Main Itinerary", "Option B"'),
-      description: z.string().optional(),
-      isActive: z.boolean().optional(),
+      notes: z.string().optional().describe('Optional notes for the itinerary'),
+      status: z.nativeEnum(ItineraryStatus).optional().describe('Itinerary status (default: DRAFT)'),
     },
     async (params) => {
       try {
@@ -686,7 +698,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error creating itinerary: ${error.message}` },
+            { type: 'text' as const, text: `Error creating itinerary: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -708,7 +720,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error listing itineraries: ${error.message}` },
+            { type: 'text' as const, text: `Error listing itineraries: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -730,7 +742,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error getting itinerary: ${error.message}` },
+            { type: 'text' as const, text: `Error getting itinerary: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -745,17 +757,21 @@ export function registerTripTools(server: McpServer) {
     {
       id: z.string().uuid(),
       name: z.string().min(1).max(100).optional(),
-      description: z.string().optional(),
-      isActive: z.boolean().optional(),
+      notes: z.string().optional().describe('Optional notes for the itinerary'),
+      status: z.nativeEnum(ItineraryStatus).optional().describe('Itinerary status'),
     },
     async (params) => {
       try {
-        const itinerary = await updateItinerary(params.id, params);
+        const itinerary = await updateItinerary(params.id, {
+          name: params.name,
+          notes: params.notes,
+          status: params.status,
+        });
         return { content: [{ type: 'text' as const, text: JSON.stringify(itinerary, null, 2) }] };
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error updating itinerary: ${error.message}` },
+            { type: 'text' as const, text: `Error updating itinerary: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -777,7 +793,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error generating days: ${error.message}` },
+            { type: 'text' as const, text: `Error generating days: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -791,17 +807,22 @@ export function registerTripTools(server: McpServer) {
     'Update a day in the itinerary',
     {
       id: z.string().uuid(),
-      title: z.string().max(200).optional(),
+      theme: z.string().max(200).optional().describe('Day theme (e.g., "Museum Day", "Beach Day")'),
+      pace: z.nativeEnum(DayPace).optional().describe('Day pace (LIGHT, MEDIUM, FULL)'),
       notes: z.string().optional(),
     },
     async (params) => {
       try {
-        const day = await updateItineraryDay(params.id, params);
+        const day = await updateItineraryDay(params.id, {
+          theme: params.theme,
+          pace: params.pace,
+          notes: params.notes,
+        });
         return { content: [{ type: 'text' as const, text: JSON.stringify(day, null, 2) }] };
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error updating day: ${error.message}` },
+            { type: 'text' as const, text: `Error updating day: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -814,17 +835,19 @@ export function registerTripTools(server: McpServer) {
     'trip_itinerary_slot_add',
     'Add a time slot to a day',
     {
-      dayId: z.string().uuid(),
-      tripItemId: z.string().uuid().optional(),
-      startTime: z.string().optional().describe('HH:MM format'),
-      endTime: z.string().optional().describe('HH:MM format'),
-      title: z.string().max(200).optional(),
+      itineraryDayId: z.string().uuid().describe('The itinerary day ID'),
+      tripItemId: z.string().uuid().optional().describe('Link to a trip item'),
+      timeSlot: z.nativeEnum(TimeSlot).optional().describe('Time slot (MORNING, AFTERNOON, EVENING, etc.)'),
+      timeStart: z.string().optional().describe('Specific start time (HH:MM format)'),
+      timeEnd: z.string().optional().describe('Specific end time (HH:MM format)'),
       description: z.string().optional(),
-      location: z.string().optional(),
-      isTentative: z.boolean().optional(),
-      backupTripItemId: z.string().uuid().optional(),
-      transportNotes: z.string().optional(),
+      backupTripItemId: z.string().uuid().optional().describe('Backup trip item if primary unavailable'),
+      travelTimeMinutes: z.number().int().min(0).optional().describe('Travel time to location in minutes'),
+      estimatedCost: z.number().min(0).optional(),
+      weatherDependent: z.boolean().optional().describe('Whether activity depends on weather'),
+      requiresBooking: z.boolean().optional().describe('Whether advance booking is required'),
       notes: z.string().optional(),
+      sortOrder: z.number().int().optional().describe('Order within the time slot'),
     },
     async (params) => {
       try {
@@ -833,7 +856,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error adding slot: ${error.message}` },
+            { type: 'text' as const, text: `Error adding slot: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -847,24 +870,40 @@ export function registerTripTools(server: McpServer) {
     'Update a time slot',
     {
       id: z.string().uuid(),
-      tripItemId: z.string().uuid().optional(),
-      startTime: z.string().optional(),
-      endTime: z.string().optional(),
-      title: z.string().max(200).optional(),
+      tripItemId: z.string().uuid().optional().describe('Link to a trip item'),
+      timeSlot: z.nativeEnum(TimeSlot).optional().describe('Time slot (MORNING, AFTERNOON, EVENING, etc.)'),
+      timeStart: z.string().optional().describe('Specific start time (HH:MM format)'),
+      timeEnd: z.string().optional().describe('Specific end time (HH:MM format)'),
       description: z.string().optional(),
-      location: z.string().optional(),
-      isTentative: z.boolean().optional(),
-      transportNotes: z.string().optional(),
+      backupTripItemId: z.string().uuid().optional().describe('Backup trip item if primary unavailable'),
+      travelTimeMinutes: z.number().int().min(0).optional().describe('Travel time to location in minutes'),
+      estimatedCost: z.number().min(0).optional(),
+      weatherDependent: z.boolean().optional().describe('Whether activity depends on weather'),
+      requiresBooking: z.boolean().optional().describe('Whether advance booking is required'),
       notes: z.string().optional(),
+      sortOrder: z.number().int().optional().describe('Order within the time slot'),
     },
     async (params) => {
       try {
-        const slot = await updateItinerarySlot(params.id, params);
+        const slot = await updateItinerarySlot(params.id, {
+          tripItemId: params.tripItemId,
+          timeSlot: params.timeSlot,
+          timeStart: params.timeStart,
+          timeEnd: params.timeEnd,
+          description: params.description,
+          backupTripItemId: params.backupTripItemId,
+          travelTimeMinutes: params.travelTimeMinutes,
+          estimatedCost: params.estimatedCost,
+          weatherDependent: params.weatherDependent,
+          requiresBooking: params.requiresBooking,
+          notes: params.notes,
+          sortOrder: params.sortOrder,
+        });
         return { content: [{ type: 'text' as const, text: JSON.stringify(slot, null, 2) }] };
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error updating slot: ${error.message}` },
+            { type: 'text' as const, text: `Error updating slot: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -886,7 +925,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error deleting slot: ${error.message}` },
+            { type: 'text' as const, text: `Error deleting slot: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -908,7 +947,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error auto-populating itinerary: ${error.message}` },
+            { type: 'text' as const, text: `Error auto-populating itinerary: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -926,26 +965,31 @@ export function registerTripTools(server: McpServer) {
     'Add a reminder or task',
     {
       tripId: z.string().uuid(),
-      tripItemId: z.string().uuid().optional(),
+      tripItemId: z.string().uuid().optional().describe('Link reminder to a specific trip item'),
       title: z.string().min(1).max(200),
       description: z.string().optional(),
       remindDate: z.string().describe('YYYY-MM-DD or YYYY-MM-DDTHH:MM'),
       priority: z.nativeEnum(TripItemPriority).optional(),
-      taskType: z.string().optional(),
-      checklistItems: z.array(z.object({ task: z.string(), completed: z.boolean() })).optional(),
-      notes: z.string().optional(),
+      taskType: z.string().optional().describe('Type of task (e.g., "booking", "payment", "packing")'),
+      checklistItems: z.array(z.object({ text: z.string(), completed: z.boolean() })).optional(),
     },
     async (params) => {
       try {
         const reminder = await addReminder({
-          ...params,
+          tripId: params.tripId,
+          tripItemId: params.tripItemId,
+          title: params.title,
+          description: params.description,
           remindDate: new Date(params.remindDate),
+          priority: params.priority,
+          taskType: params.taskType,
+          checklistItems: params.checklistItems,
         });
         return { content: [{ type: 'text' as const, text: JSON.stringify(reminder, null, 2) }] };
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error adding reminder: ${error.message}` },
+            { type: 'text' as const, text: `Error adding reminder: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -978,7 +1022,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error listing reminders: ${error.message}` },
+            { type: 'text' as const, text: `Error listing reminders: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -997,20 +1041,23 @@ export function registerTripTools(server: McpServer) {
       remindDate: z.string().optional(),
       status: z.nativeEnum(ReminderStatus).optional(),
       priority: z.nativeEnum(TripItemPriority).optional(),
-      checklistItems: z.array(z.object({ task: z.string(), completed: z.boolean() })).optional(),
-      notes: z.string().optional(),
+      checklistItems: z.array(z.object({ text: z.string(), completed: z.boolean() })).optional(),
     },
     async (params) => {
       try {
         const reminder = await updateReminder(params.id, {
-          ...params,
+          title: params.title,
+          description: params.description,
           remindDate: params.remindDate ? new Date(params.remindDate) : undefined,
+          status: params.status,
+          priority: params.priority,
+          checklistItems: params.checklistItems,
         });
         return { content: [{ type: 'text' as const, text: JSON.stringify(reminder, null, 2) }] };
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error updating reminder: ${error.message}` },
+            { type: 'text' as const, text: `Error updating reminder: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -1033,7 +1080,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error getting due reminders: ${error.message}` },
+            { type: 'text' as const, text: `Error getting due reminders: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -1052,29 +1099,34 @@ export function registerTripTools(server: McpServer) {
     {
       tripId: z.string().uuid(),
       type: z.nativeEnum(DocumentType),
-      name: z.string().min(1).max(200),
-      description: z.string().optional(),
+      title: z.string().min(1).max(200).describe('Document title'),
+      tripItemId: z.string().uuid().optional().describe('Link to a trip item'),
+      travellerName: z.string().max(100).optional().describe('Name of the traveller this document belongs to'),
       documentNumber: z.string().max(100).optional(),
       expiryDate: z.string().optional().describe('YYYY-MM-DD'),
       issueDate: z.string().optional().describe('YYYY-MM-DD'),
-      issuingAuthority: z.string().max(200).optional(),
       fileUrl: z.string().url().optional(),
-      status: z.string().optional(),
-      assignedTo: z.string().max(100).optional(),
       notes: z.string().optional(),
     },
     async (params) => {
       try {
         const document = await addDocument({
-          ...params,
+          tripId: params.tripId,
+          type: params.type,
+          title: params.title,
+          tripItemId: params.tripItemId,
+          travellerName: params.travellerName,
+          documentNumber: params.documentNumber,
           expiryDate: params.expiryDate ? new Date(params.expiryDate) : undefined,
           issueDate: params.issueDate ? new Date(params.issueDate) : undefined,
+          fileUrl: params.fileUrl,
+          notes: params.notes,
         });
         return { content: [{ type: 'text' as const, text: JSON.stringify(document, null, 2) }] };
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error adding document: ${error.message}` },
+            { type: 'text' as const, text: `Error adding document: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -1089,23 +1141,21 @@ export function registerTripTools(server: McpServer) {
     {
       tripId: z.string().uuid(),
       type: z.union([z.nativeEnum(DocumentType), z.array(z.nativeEnum(DocumentType))]).optional(),
-      status: z.string().optional(),
-      assignedTo: z.string().optional(),
-      expiringWithinDays: z.number().int().min(0).optional(),
+      travellerName: z.string().optional().describe('Filter by traveller name'),
+      expiringWithinDays: z.number().int().min(0).optional().describe('Find documents expiring within N days'),
     },
     async (params) => {
       try {
         const documents = await listDocuments(params.tripId, {
           type: params.type,
-          status: params.status,
-          assignedTo: params.assignedTo,
+          travellerName: params.travellerName,
           expiringWithinDays: params.expiringWithinDays,
         });
         return { content: [{ type: 'text' as const, text: JSON.stringify(documents, null, 2) }] };
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error listing documents: ${error.message}` },
+            { type: 'text' as const, text: `Error listing documents: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -1119,28 +1169,30 @@ export function registerTripTools(server: McpServer) {
     'Update a travel document',
     {
       id: z.string().uuid(),
-      name: z.string().min(1).max(200).optional(),
-      description: z.string().optional(),
+      title: z.string().min(1).max(200).optional().describe('Document title'),
+      travellerName: z.string().max(100).optional().describe('Name of the traveller'),
       documentNumber: z.string().max(100).optional(),
-      expiryDate: z.string().optional(),
-      issueDate: z.string().optional(),
-      issuingAuthority: z.string().max(200).optional(),
+      expiryDate: z.string().optional().describe('YYYY-MM-DD'),
+      issueDate: z.string().optional().describe('YYYY-MM-DD'),
       fileUrl: z.string().url().optional(),
-      status: z.string().optional(),
       notes: z.string().optional(),
     },
     async (params) => {
       try {
         const document = await updateDocument(params.id, {
-          ...params,
+          title: params.title,
+          travellerName: params.travellerName,
+          documentNumber: params.documentNumber,
           expiryDate: params.expiryDate ? new Date(params.expiryDate) : undefined,
           issueDate: params.issueDate ? new Date(params.issueDate) : undefined,
+          fileUrl: params.fileUrl,
+          notes: params.notes,
         });
         return { content: [{ type: 'text' as const, text: JSON.stringify(document, null, 2) }] };
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error updating document: ${error.message}` },
+            { type: 'text' as const, text: `Error updating document: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -1162,7 +1214,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error deleting document: ${error.message}` },
+            { type: 'text' as const, text: `Error deleting document: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -1182,14 +1234,11 @@ export function registerTripTools(server: McpServer) {
       tripId: z.string().uuid(),
       type: z.nativeEnum(ContactType),
       name: z.string().min(1).max(200),
-      organization: z.string().max(200).optional(),
       phone: z.string().max(50).optional(),
       email: z.string().email().optional(),
       address: z.string().optional(),
-      website: z.string().url().optional(),
-      emergencyContact: z.boolean().optional(),
+      isEmergency: z.boolean().optional().describe('Whether this is an emergency contact'),
       notes: z.string().optional(),
-      customFields: z.record(z.string(), z.any()).optional(),
     },
     async (params) => {
       try {
@@ -1198,7 +1247,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error adding contact: ${error.message}` },
+            { type: 'text' as const, text: `Error adding contact: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -1225,7 +1274,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error listing contacts: ${error.message}` },
+            { type: 'text' as const, text: `Error listing contacts: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -1240,23 +1289,27 @@ export function registerTripTools(server: McpServer) {
     {
       id: z.string().uuid(),
       name: z.string().min(1).max(200).optional(),
-      organization: z.string().max(200).optional(),
       phone: z.string().max(50).optional(),
       email: z.string().email().optional(),
       address: z.string().optional(),
-      website: z.string().url().optional(),
-      emergencyContact: z.boolean().optional(),
+      isEmergency: z.boolean().optional().describe('Whether this is an emergency contact'),
       notes: z.string().optional(),
-      customFields: z.record(z.string(), z.any()).optional(),
     },
     async (params) => {
       try {
-        const contact = await updateContact(params.id, params);
+        const contact = await updateContact(params.id, {
+          name: params.name,
+          phone: params.phone,
+          email: params.email,
+          address: params.address,
+          isEmergency: params.isEmergency,
+          notes: params.notes,
+        });
         return { content: [{ type: 'text' as const, text: JSON.stringify(contact, null, 2) }] };
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error updating contact: ${error.message}` },
+            { type: 'text' as const, text: `Error updating contact: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -1278,7 +1331,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error deleting contact: ${error.message}` },
+            { type: 'text' as const, text: `Error deleting contact: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -1303,12 +1356,8 @@ export function registerTripTools(server: McpServer) {
       country: z.string().max(100).optional(),
       latitude: z.number().optional(),
       longitude: z.number().optional(),
-      googleMapsUrl: z.string().url().optional(),
-      website: z.string().url().optional(),
-      phone: z.string().max(50).optional(),
-      openingHours: z.string().optional(),
+      placeId: z.string().optional().describe('Google Maps place ID'),
       notes: z.string().optional(),
-      customFields: z.record(z.string(), z.any()).optional(),
     },
     async (params) => {
       try {
@@ -1317,7 +1366,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error adding location: ${error.message}` },
+            { type: 'text' as const, text: `Error adding location: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -1346,7 +1395,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error listing locations: ${error.message}` },
+            { type: 'text' as const, text: `Error listing locations: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -1376,7 +1425,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error getting nearby locations: ${error.message}` },
+            { type: 'text' as const, text: `Error getting nearby locations: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -1394,29 +1443,19 @@ export function registerTripTools(server: McpServer) {
     'Add a note or journal entry',
     {
       tripId: z.string().uuid(),
-      tripItemId: z.string().uuid().optional(),
-      title: z.string().min(1).max(200),
+      tripItemId: z.string().uuid().optional().describe('Link note to a specific trip item'),
+      title: z.string().max(200).optional(),
       content: z.string().min(1),
-      noteDate: z.string().optional().describe('YYYY-MM-DD (defaults to now)'),
       tags: z.array(z.string()).optional(),
-      isPinned: z.boolean().optional(),
-      attachments: z.array(z.object({
-        name: z.string(),
-        url: z.string().url(),
-        type: z.string().optional(),
-      })).optional(),
     },
     async (params) => {
       try {
-        const note = await addNote({
-          ...params,
-          noteDate: params.noteDate ? new Date(params.noteDate) : undefined,
-        });
+        const note = await addNote(params);
         return { content: [{ type: 'text' as const, text: JSON.stringify(note, null, 2) }] };
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error adding note: ${error.message}` },
+            { type: 'text' as const, text: `Error adding note: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -1432,17 +1471,15 @@ export function registerTripTools(server: McpServer) {
       tripId: z.string().uuid(),
       tripItemId: z.string().uuid().optional(),
       tag: z.string().optional(),
-      pinnedOnly: z.boolean().optional(),
-      dateFrom: z.string().optional(),
-      dateTo: z.string().optional(),
-      searchTerm: z.string().optional(),
+      dateFrom: z.string().optional().describe('Filter notes created after this date (YYYY-MM-DD)'),
+      dateTo: z.string().optional().describe('Filter notes created before this date (YYYY-MM-DD)'),
+      searchTerm: z.string().optional().describe('Search in title and content'),
     },
     async (params) => {
       try {
         const notes = await listNotes(params.tripId, {
           tripItemId: params.tripItemId,
           tag: params.tag,
-          pinnedOnly: params.pinnedOnly,
           dateFrom: params.dateFrom ? new Date(params.dateFrom) : undefined,
           dateTo: params.dateTo ? new Date(params.dateTo) : undefined,
           searchTerm: params.searchTerm,
@@ -1451,7 +1488,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error listing notes: ${error.message}` },
+            { type: 'text' as const, text: `Error listing notes: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -1465,28 +1502,22 @@ export function registerTripTools(server: McpServer) {
     'Update a note',
     {
       id: z.string().uuid(),
-      title: z.string().min(1).max(200).optional(),
+      title: z.string().max(200).optional(),
       content: z.string().min(1).optional(),
-      noteDate: z.string().optional(),
       tags: z.array(z.string()).optional(),
-      isPinned: z.boolean().optional(),
-      attachments: z.array(z.object({
-        name: z.string(),
-        url: z.string().url(),
-        type: z.string().optional(),
-      })).optional(),
     },
     async (params) => {
       try {
         const note = await updateNote(params.id, {
-          ...params,
-          noteDate: params.noteDate ? new Date(params.noteDate) : undefined,
+          title: params.title,
+          content: params.content,
+          tags: params.tags,
         });
         return { content: [{ type: 'text' as const, text: JSON.stringify(note, null, 2) }] };
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error updating note: ${error.message}` },
+            { type: 'text' as const, text: `Error updating note: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };
@@ -1508,7 +1539,7 @@ export function registerTripTools(server: McpServer) {
       } catch (error) {
         return {
           content: [
-            { type: 'text' as const, text: `Error deleting note: ${error.message}` },
+            { type: 'text' as const, text: `Error deleting note: ${getErrorMessage(error)}` },
           ],
           isError: true,
         };

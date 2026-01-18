@@ -32,10 +32,12 @@ export default defineConfig({
         '.next/',
       ],
       // Coverage thresholds
-      lines: 80,
-      functions: 80,
-      branches: 75,
-      statements: 80,
+      thresholds: {
+        lines: 80,
+        functions: 80,
+        branches: 75,
+        statements: 80,
+      },
     },
 
     // Test timeout

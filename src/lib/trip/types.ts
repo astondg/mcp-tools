@@ -303,6 +303,18 @@ export interface TripLocationResponse {
   updatedAt: Date;
 }
 
+export interface TripNoteResponse {
+  id: string;
+  tripId: string;
+  tripItemId?: string;
+  title?: string;
+  content: string;
+  noteType: string;
+  tags?: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Summary/aggregate response types
 export interface TripStatusSummary {
   totalItems: number;

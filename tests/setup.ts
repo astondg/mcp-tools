@@ -37,33 +37,46 @@ beforeEach(async () => {
   // This ensures test isolation
 
   // Delete in order to respect foreign key constraints
+  // Trip-related models
+  await prisma.tripItinerarySlot.deleteMany();
+  await prisma.tripItineraryDay.deleteMany();
+  await prisma.tripItinerary.deleteMany();
   await prisma.tripReminder.deleteMany();
-  await prisma.itineraryItem.deleteMany();
+  await prisma.tripNote.deleteMany();
+  await prisma.tripDocument.deleteMany();
+  await prisma.tripContact.deleteMany();
+  await prisma.tripPackingItem.deleteMany();
+  await prisma.tripItemOption.deleteMany();
   await prisma.tripItem.deleteMany();
+  await prisma.tripLocation.deleteMany();
   await prisma.trip.deleteMany();
 
+  // Budget/expense models
   await prisma.expense.deleteMany();
   await prisma.budgetCategory.deleteMany();
   await prisma.income.deleteMany();
   await prisma.incomeSource.deleteMany();
 
-  await prisma.fitnessGoalProgress.deleteMany();
+  // Fitness models
+  await prisma.goalProgressLog.deleteMany();
   await prisma.fitnessGoal.deleteMany();
-  await prisma.trainingSession.deleteMany();
-  await prisma.trainingPhase.deleteMany();
+  await prisma.sessionTemplate.deleteMany();
+  await prisma.programPhaseBlock.deleteMany();
   await prisma.trainingProgram.deleteMany();
   await prisma.bodyMeasurement.deleteMany();
-  await prisma.workout.deleteMany();
+  await prisma.workoutLog.deleteMany();
   await prisma.strengthPR.deleteMany();
   await prisma.nutritionDay.deleteMany();
 
-  await prisma.vehicleService.deleteMany();
-  await prisma.vehicleServicePart.deleteMany();
+  // Vehicle models
+  await prisma.servicePart.deleteMany();
+  await prisma.serviceRecord.deleteMany();
   await prisma.maintenanceSchedule.deleteMany();
+  await prisma.part.deleteMany();
   await prisma.vehicle.deleteMany();
-  await prisma.vehiclePart.deleteMany();
 
-  await prisma.purchase.deleteMany();
+  // Shopping models
+  await prisma.purchaseHistory.deleteMany();
   await prisma.wishlistItem.deleteMany();
   await prisma.purchaseCategory.deleteMany();
 });
@@ -76,5 +89,4 @@ afterEach(async () => {
 });
 
 // Set test environment variables
-process.env.NODE_ENV = 'test';
 process.env.LOG_LEVEL = 'error'; // Reduce log noise during tests
