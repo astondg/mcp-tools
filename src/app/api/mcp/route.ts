@@ -25,7 +25,7 @@ const handler = createMcpHandler(
     registerFitnessTools(server);
     registerScenarioTools(server);
     registerCategorizationTools(server);
-    registerTripTools(server);
+    // registerTripTools(server);
   },
   {},
   {
