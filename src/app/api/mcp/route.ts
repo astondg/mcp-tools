@@ -12,6 +12,7 @@ import { registerFitnessTools } from './tools/fitness';
 import { registerScenarioTools } from './tools/scenarios';
 import { registerCategorizationTools } from './tools/categorization';
 import { registerTripTools } from './tools/trip';
+import { registerHevyTools } from './tools/hevy';
 
 const handler = createMcpHandler(
   (server) => {
@@ -22,10 +23,11 @@ const handler = createMcpHandler(
     registerJobsTools(server);
     registerVehicleTools(server);
     registerBudgetTools(server);
-    registerFitnessTools(server);
+    // registerFitnessTools(server);
     registerScenarioTools(server);
     registerCategorizationTools(server);
     // registerTripTools(server);
+    registerHevyTools(server);
   },
   {},
   {
