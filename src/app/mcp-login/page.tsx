@@ -1,19 +1,14 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useState, Suspense } from 'react';
 
 function LoginForm() {
-  const searchParams = useSearchParams();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-
-  // Get the redirect URL from search params (set by Better Auth OAuth flow)
-  const redirectTo = searchParams.get('redirect_uri') || searchParams.get('callbackURL') || '/';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,9 +49,16 @@ function LoginForm() {
         throw new Error(data.message || data.error || 'Authentication failed');
       }
 
-      // On success, redirect back to the OAuth flow or home
-      // The OAuth flow will handle the rest
-      window.location.href = redirectTo;
+      // Sign-in succeeded and a session cookie is now set. Re-enter the OAuth
+      // authorize endpoint with the original query string so Better Auth can
+      // mint a code and 302 the browser to the OAuth client's redirect_uri.
+      // Never navigate directly to redirect_uri — that only works with a code.
+      const originalQuery = window.location.search;
+      if (originalQuery && originalQuery.length > 1) {
+        window.location.href = `/api/auth/mcp/authorize${originalQuery}`;
+      } else {
+        window.location.href = '/';
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
