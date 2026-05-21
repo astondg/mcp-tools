@@ -141,6 +141,7 @@ See [`.env.example`](.env.example) for the full list. Required:
 - `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` — Upstash KV
 - `HEVY_API_KEY` — Hevy Pro API key (Settings → API in the Hevy app); required for `hevy_*` tools
 - `FREELANCER_CLIENT_ID`, `FREELANCER_CLIENT_SECRET`, `FREELANCER_REDIRECT_URI` — for the Freelancer integration in `freelancer.ts`
+- `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `STRAVA_REDIRECT_URI` — for the Strava integration. Register an app at https://www.strava.com/settings/api. Redirect URI must match exactly, e.g. `https://mcp-tools-one.vercel.app/api/strava/callback`. First-time setup: visit `/api/strava/connect` in a browser to authorize; tokens (access + refresh) are stored in Redis under `strava_token` and auto-refreshed by `getValidAccessToken()` in `src/lib/strava.ts`.
 
 ## Testing the MCP server locally
 
