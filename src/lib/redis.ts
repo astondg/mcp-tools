@@ -1,11 +1,8 @@
 import { Redis } from '@upstash/redis';
 
-// Initialize Redis client
-// Vercel will provide these environment variables when you add Upstash Redis integration
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-});
+// Initialize Redis client. Redis.fromEnv() reads UPSTASH_REDIS_REST_URL/TOKEN
+// and falls back to KV_REST_API_URL/TOKEN, which is what Vercel's KV integration sets.
+const redis = Redis.fromEnv();
 
 export default redis;
 

@@ -7,11 +7,9 @@
 
 import { Redis } from '@upstash/redis';
 
-// Initialize Redis client
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-});
+// Initialize Redis client. Redis.fromEnv() falls back to KV_REST_API_URL/TOKEN
+// (the names Vercel's KV integration sets).
+const redis = Redis.fromEnv();
 
 /**
  * Cache configuration interface
