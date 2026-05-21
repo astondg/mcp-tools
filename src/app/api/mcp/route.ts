@@ -13,6 +13,7 @@ import { registerScenarioTools } from './tools/scenarios';
 import { registerCategorizationTools } from './tools/categorization';
 import { registerTripTools } from './tools/trip';
 import { registerHevyTools } from './tools/hevy';
+import { registerStravaTools } from './tools/strava';
 
 const handler = createMcpHandler(
   (server) => {
@@ -28,6 +29,7 @@ const handler = createMcpHandler(
     registerCategorizationTools(server);
     // registerTripTools(server);
     registerHevyTools(server);
+    registerStravaTools(server);
   },
   {},
   {
