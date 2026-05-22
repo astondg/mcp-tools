@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash, timingSafeEqual } from 'crypto';
 import { getStoredTokens, getValidAccessToken, STRAVA_API_BASE } from '@/lib/strava';
-import { logger } from '@/lib/shared/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -101,7 +100,7 @@ export async function GET(req: NextRequest) {
     if (!t) return errorJson(503, 'strava not configured');
     accessToken = t;
   } catch (err) {
-    logger.error({ err: err instanceof Error ? err.message : String(err) }, 'vault-ops: strava token refresh failed');
+    console.error('vault-ops: strava token refresh failed:', err instanceof Error ? err.message : err);
     return errorJson(502, 'upstream strava error');
   }
 
@@ -119,13 +118,13 @@ export async function GET(req: NextRequest) {
         headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
       });
     } catch (err) {
-      logger.error({ err: err instanceof Error ? err.message : String(err), page }, 'vault-ops: strava network error');
+      console.error(`vault-ops: strava network error (page ${page}):`, err instanceof Error ? err.message : err);
       return errorJson(502, 'upstream strava error');
     }
 
     if (!resp.ok) {
       const body = await resp.text().catch(() => '');
-      logger.error({ status: resp.status, body: body.slice(0, 500), page }, 'vault-ops: strava api error');
+      console.error(`vault-ops: strava api error (page ${page}, status ${resp.status}):`, body.slice(0, 500));
       return errorJson(502, 'upstream strava error');
     }
 
@@ -133,12 +132,12 @@ export async function GET(req: NextRequest) {
     try {
       batch = (await resp.json()) as Record<string, unknown>[];
     } catch (err) {
-      logger.error({ err: err instanceof Error ? err.message : String(err), page }, 'vault-ops: strava json parse failed');
+      console.error(`vault-ops: strava json parse failed (page ${page}):`, err instanceof Error ? err.message : err);
       return errorJson(502, 'upstream strava error');
     }
 
     if (!Array.isArray(batch)) {
-      logger.error({ page }, 'vault-ops: strava returned non-array');
+      console.error(`vault-ops: strava returned non-array (page ${page})`);
       return errorJson(502, 'upstream strava error');
     }
 
