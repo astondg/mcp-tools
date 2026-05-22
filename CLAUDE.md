@@ -142,6 +142,7 @@ See [`.env.example`](.env.example) for the full list. Required:
 - `HEVY_API_KEY` — Hevy Pro API key (Settings → API in the Hevy app); required for `hevy_*` tools
 - `FREELANCER_CLIENT_ID`, `FREELANCER_CLIENT_SECRET`, `FREELANCER_REDIRECT_URI` — for the Freelancer integration in `freelancer.ts`
 - `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `STRAVA_REDIRECT_URI` — for the Strava integration. Register an app at https://www.strava.com/settings/api. Redirect URI must match exactly, e.g. `https://mcp-tools-one.vercel.app/api/strava/callback`. First-time setup: visit `/api/strava/connect` in a browser to authorize; tokens (access + refresh) are stored in Redis under `strava_token` and auto-refreshed by `getValidAccessToken()` in `src/lib/strava.ts`.
+- `VAULT_OPS_API_KEY` — bearer token for the `/vault-ops/strava/activities` proxy (consumed by the `vault-ops` repo's daily roll-up). Generate with `openssl rand -hex 32`; same value goes in this project's Vercel env and in `vault-ops/.env`.
 
 ## Testing the MCP server locally
 
